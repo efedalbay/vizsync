@@ -6,6 +6,8 @@ from vizsync.errors import (
     AudioError,
     ChartMapError,
     ScriptError,
+    ScriptParseError,
+    ScriptProblem,
     TranscriptionError,
     VizsyncError,
 )
@@ -38,3 +40,19 @@ def test_line_without_path() -> None:
 def test_attributes_are_kept() -> None:
     err = ScriptError("bad", path=Path("s.md"), line=3)
     assert (err.message, err.path, err.line) == ("bad", Path("s.md"), 3)
+
+
+def test_parse_error_lists_every_problem_sorted_by_line() -> None:
+    problems = [ScriptProblem(11, "second"), ScriptProblem(5, "first"), ScriptProblem(None, "last")]
+    err = ScriptParseError(problems, path=Path("s.md"))
+    assert str(err) == "s.md line 5: first\ns.md line 11: second\ns.md: last"
+    assert [p.message for p in err.problems] == ["first", "second", "last"]
+    assert err.path == Path("s.md")
+
+
+def test_parse_error_is_a_script_error() -> None:
+    assert issubclass(ScriptParseError, ScriptError)
+
+
+def test_parse_error_without_path() -> None:
+    assert str(ScriptParseError([ScriptProblem(3, "bad")])) == "Line 3: bad"

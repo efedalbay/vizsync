@@ -4,7 +4,7 @@ This is the source of truth for vizsync's inputs, commands and outputs. If code 
 
 ## 1. Script format
 
-A script is a Markdown file.
+A script is a Markdown file, saved as UTF-8 (a byte order mark is accepted). Line numbers in messages start at 1.
 
 ### Paragraph lines
 
@@ -17,7 +17,10 @@ P12 — Text of the paragraph.
 - Identifier: `P` followed by digits. `P12`, `P012` and `p12` are the same paragraph, reported as `P12`.
 - Separator after the identifier: one of `—`, `–`, `-`, `:`, `.` surrounded by optional spaces. Both `P12 — text` and `P12: text` work.
 - Numbers must be unique. They should increase, but gaps are allowed (`P5`, `P7`). A decreasing or repeated number is an error.
-- A paragraph's text continues on the following non-blank lines until the next paragraph line, a heading, or a blockquote line (see below).
+- The identifier must be at the very start of the line (no indentation).
+- A line that starts with an identifier followed by a space or nothing, but has no separator (`P12 text`), is an error. Otherwise a paragraph would silently swallow it.
+- A paragraph's text continues on the following non-blank lines until the next paragraph line, a heading, a blockquote line or a blank line (see below).
+- Text that belongs to no paragraph (before the first paragraph, or after a blank line) is ignored.
 
 ### What text is aligned (`--text`)
 
@@ -26,7 +29,9 @@ P12 — Text of the paragraph.
 | `quote` (default) | The blockquote (`> ...`) lines directly after the paragraph line | Bilingual scripts: the paragraph line holds the reader's language, the quote holds the spoken language |
 | `inline` | The text on the paragraph line itself | Single-language scripts |
 
-In `quote` mode a paragraph without a blockquote is an error, reported with its identifier and line number.
+In `quote` mode a paragraph without a blockquote is an error, reported with its identifier and line number. All blockquote lines that follow a paragraph line, up to the next paragraph line or heading, are joined into one text, even if blank lines separate them. Other text lines are ignored in this mode.
+
+In `inline` mode the text is the paragraph line plus its continuation lines. Blockquote lines are ignored.
 
 Example (`quote` mode):
 
@@ -45,7 +50,7 @@ Applied to the aligned text only:
 3. HTML comments are removed.
 4. Whitespace is collapsed.
 
-An empty paragraph after cleaning is an error.
+A paragraph with no text left after cleaning is an error.
 
 ### Headings and chapters
 
@@ -55,7 +60,9 @@ If a heading contains ` / `, the text after the last ` / ` is used as the chapte
 
 `## 2. Yükseliş / 2. The Rise` becomes `The Rise` in `quote` mode.
 
-A level 1 heading (`#`) is the document title and is ignored.
+A level 1 heading (`#`) is the document title and is ignored. Headings of level 4 to 6 are ignored too, but they still end the text of the paragraph above.
+
+A heading without paragraphs under it does not create a chapter, and `Intro` exists only if there are paragraphs before the first heading. A heading whose title is empty after the rules above is an error. A script with no paragraphs is an error.
 
 ## 2. Commands
 

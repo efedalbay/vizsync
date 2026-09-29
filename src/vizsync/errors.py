@@ -1,6 +1,19 @@
 """Expected failures. The CLI turns these into a message and exit code 1."""
 
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
+
+
+def _locate(message: str, path: Path | None, line: int | None) -> str:
+    """Put the file and line, when known, in front of a message."""
+    if path is not None and line is not None:
+        return f"{path} line {line}: {message}"
+    if path is not None:
+        return f"{path}: {message}"
+    if line is not None:
+        return f"Line {line}: {message}"
+    return message
 
 
 class VizsyncError(Exception):
@@ -14,20 +27,29 @@ class VizsyncError(Exception):
         self.message = message
         self.path = path
         self.line = line
-        super().__init__(self._format())
-
-    def _format(self) -> str:
-        if self.path is not None and self.line is not None:
-            return f"{self.path} line {self.line}: {self.message}"
-        if self.path is not None:
-            return f"{self.path}: {self.message}"
-        if self.line is not None:
-            return f"Line {self.line}: {self.message}"
-        return self.message
+        super().__init__(_locate(message, path, line))
 
 
 class ScriptError(VizsyncError):
     """The script file is missing or invalid."""
+
+
+@dataclass(frozen=True)
+class ScriptProblem:
+    """One problem found in a script. ``line`` is None when it is not tied to a line."""
+
+    line: int | None
+    message: str
+
+
+class ScriptParseError(ScriptError):
+    """The script has one or more problems. Every problem is listed, in line order."""
+
+    def __init__(self, problems: Sequence[ScriptProblem], *, path: Path | None = None) -> None:
+        self.problems = sorted(problems, key=lambda p: (p.line is None, p.line or 0))
+        text = "\n".join(_locate(p.message, path, p.line) for p in self.problems)
+        super().__init__(text)
+        self.path = path
 
 
 class AudioError(VizsyncError):
