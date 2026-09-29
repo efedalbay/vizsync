@@ -20,8 +20,22 @@ Read these before making changes. They are the source of truth:
 - Efe develops on **Windows** with PowerShell. Give commands that work there.
 - Keep chat replies short and plain. Efe often reads them while busy: say what you did, what you need from him, and stop.
 - When you make a non-obvious design decision, explain the reason in one or two sentences in chat. Do not put these explanations in code comments.
-- Work on **one milestone at a time**, in `docs/ROADMAP.md` order. At the start of a milestone, post a short plan (files to create or change, tests to add) and wait for Efe's approval before writing code.
-- At the end of a milestone, list each acceptance criterion and whether it is met, with evidence (test output, command output).
+- Work on **one milestone at a time**, in `docs/ROADMAP.md` order. At the start of a milestone, post a short plan (files to create or change, tests to add) and wait for Efe's approval before writing code. Approving the plan also approves the branch, pull request and merge for it (see Git).
+- At the end of a milestone, list each acceptance criterion and whether it is met, with evidence (test output, command output). Then add a numbered **"Senin yapacağın"** section (see below).
+- Add every check that has to run on Efe's computer (real-model tests, hand checks) to `scripts/check-local.ps1` in the same milestone.
+
+### The "Senin yapacağın" section
+
+Written in Turkish at the end of every milestone. It lists everything Efe has to do himself, in order, with no limit on the number of items. Only list what only he can do: never list a step Claude can do.
+
+Every item has four parts:
+
+1. **Where:** PowerShell, GitHub, DaVinci Resolve, and so on.
+2. **What to do:** the exact command to paste, or the exact place to click.
+3. **What he should see** when everything is right.
+4. **If he sees something else:** what to send back to Claude (which output, which file, which screenshot).
+
+This section is the exception to "keep chat replies short": it must be complete.
 
 ## Model routing
 
@@ -81,7 +95,16 @@ uv run mypy src
 - **No AI attribution.** Never add `Co-Authored-By` trailers, "Generated with Claude Code" lines or any similar attribution to commit messages, pull requests, code or docs. Efe is the sole author.
 - One logical change per commit. Commit at the end of each approved step, not in the middle of broken work.
 - Never commit audio recordings other than the approved fixture, model files, or output folders.
-- Do not push, tag, publish to PyPI or change CI secrets without Efe's explicit go-ahead.
+- The approved milestone plan is the scope of the workflow below. Work outside it (another milestone, a changed plan) needs new approval first.
+
+**Branch, pull request, merge.** Once Efe has approved a milestone plan, Claude does the following without asking again:
+
+1. Create a branch for the milestone, commit on it, push it and open a pull request against `main`. Never push to `main` directly.
+2. Wait for CI. When every job is green on the head commit, squash-merge the pull request and delete the branch. The squash commit title is a conventional commit with no attribution.
+3. If CI is red, fix it on the same branch and push. Never skip, disable or weaken a test to get green. If `main` moved and the branch conflicts, merge `main` into the branch.
+4. After opening a pull request, read its description back and remove any attribution line the platform added.
+
+**Still needs Efe's explicit go-ahead every time:** publishing to PyPI, creating tags or releases, and changing CI secrets.
 
 ## Definition of done (every change)
 
