@@ -17,20 +17,30 @@ param(
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path -Parent $PSScriptRoot)
 
-function Invoke-Step {
+function Invoke-ExpectingExitCode {
     param(
         [string]$Name,
+        [int]$Expected,
         [scriptblock]$Command
     )
     Write-Host ""
     Write-Host "== $Name" -ForegroundColor Cyan
     $global:LASTEXITCODE = 0
     & $Command
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "FAILED: $Name (exit code $LASTEXITCODE)" -ForegroundColor Red
+    if ($LASTEXITCODE -ne $Expected) {
+        Write-Host "FAILED: $Name (exit code $LASTEXITCODE, expected $Expected)" -ForegroundColor Red
         exit 1
     }
+    $global:LASTEXITCODE = 0
     Write-Host "OK: $Name" -ForegroundColor Green
+}
+
+function Invoke-Step {
+    param(
+        [string]$Name,
+        [scriptblock]$Command
+    )
+    Invoke-ExpectingExitCode $Name 0 $Command
 }
 
 if (-not $SkipPull) {
@@ -46,5 +56,15 @@ Invoke-Step "vizsync --version" { uv run vizsync --version }
 # one Invoke-Step per check, in the milestone that introduces them.
 # M0: none.
 
+# M1: the example script is valid, a broken one fails with exit code 1.
+Invoke-Step "check: example script" { uv run vizsync check examples/northwind-script.md }
+Invoke-Step "check: example script, inline mode" {
+    uv run vizsync check examples/northwind-script.md --text inline
+}
+Invoke-ExpectingExitCode "check: broken script exits with 1" 1 {
+    uv run vizsync check tests/unit/fixtures/several_errors.md
+}
+
 Write-Host ""
 Write-Host "All checks passed." -ForegroundColor Green
+exit 0
