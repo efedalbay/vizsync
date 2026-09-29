@@ -31,6 +31,7 @@ function Invoke-ExpectingExitCode {
         Write-Host "FAILED: $Name (exit code $LASTEXITCODE, expected $Expected)" -ForegroundColor Red
         exit 1
     }
+    $global:LASTEXITCODE = 0
     Write-Host "OK: $Name" -ForegroundColor Green
 }
 
@@ -66,3 +67,4 @@ Invoke-ExpectingExitCode "check: broken script exits with 1" 1 {
 
 Write-Host ""
 Write-Host "All checks passed." -ForegroundColor Green
+exit 0
