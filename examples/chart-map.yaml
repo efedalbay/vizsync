@@ -1,0 +1,10 @@
+# Maps vizreel chart ids to script paragraphs.
+version: 1
+charts:
+  peak-valuation:
+    paragraphs: [P2]
+  valuation:
+    paragraphs: [P3, P4]
+  collapse:
+    sequence: true        # one clip per paragraph, cut back to back
+    paragraphs: [P6, P7, P8]

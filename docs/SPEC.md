@@ -1,0 +1,232 @@
+# Specification
+
+This is the source of truth for vizsync's inputs, commands and outputs. If code and this file disagree, fix one of them in the same commit.
+
+## 1. Script format
+
+A script is a Markdown file.
+
+### Paragraph lines
+
+A paragraph starts with an identifier at the beginning of a line:
+
+```
+P12 — Text of the paragraph.
+```
+
+- Identifier: `P` followed by digits. `P12`, `P012` and `p12` are the same paragraph, reported as `P12`.
+- Separator after the identifier: one of `—`, `–`, `-`, `:`, `.` surrounded by optional spaces. Both `P12 — text` and `P12: text` work.
+- Numbers must be unique. They should increase, but gaps are allowed (`P5`, `P7`). A decreasing or repeated number is an error.
+- A paragraph's text continues on the following non-blank lines until the next paragraph line, a heading, or a blockquote line (see below).
+
+### What text is aligned (`--text`)
+
+| Mode | Text used for alignment | Use when |
+|---|---|---|
+| `quote` (default) | The blockquote (`> ...`) lines directly after the paragraph line | Bilingual scripts: the paragraph line holds the reader's language, the quote holds the spoken language |
+| `inline` | The text on the paragraph line itself | Single-language scripts |
+
+In `quote` mode a paragraph without a blockquote is an error, reported with its identifier and line number.
+
+Example (`quote` mode):
+
+```markdown
+P7 — Birlikte, neredeyse herkesin yaşadığı bir sorunu çözmeye koyuldular. [5]
+
+> Together, they set out to fix something almost everyone has lived through. [5]
+```
+
+### Text cleaning before alignment
+
+Applied to the aligned text only:
+
+1. Citation markers like `[5]`, `[30][31]` are removed.
+2. Markdown emphasis characters (`*`, `_`, backticks) are removed.
+3. HTML comments are removed.
+4. Whitespace is collapsed.
+
+An empty paragraph after cleaning is an error.
+
+### Headings and chapters
+
+Any Markdown heading of level 2 or 3 (`##`, `###`) starts a chapter. A paragraph belongs to the last chapter heading above it. Paragraphs before the first heading belong to a chapter named `Intro`.
+
+If a heading contains ` / `, the text after the last ` / ` is used as the chapter title when `--text quote` is used, and the text before the first ` / ` when `--text inline` is used. Otherwise the whole heading is used. A leading number and dot (`2. `) is removed.
+
+`## 2. Yükseliş / 2. The Rise` becomes `The Rise` in `quote` mode.
+
+A level 1 heading (`#`) is the document title and is ignored.
+
+## 2. Commands
+
+Global: `vizsync --version`, `vizsync --help`. All commands accept `--debug` (show tracebacks).
+
+### `vizsync check SCRIPT`
+
+Parses the script only. Prints the number of chapters and paragraphs, and every problem found (all of them, not just the first). Exit code 0 if the script is valid, 1 otherwise. No audio, no model download.
+
+### `vizsync align AUDIO... --script SCRIPT [options]`
+
+Aligns the script to the audio and writes the output files.
+
+`AUDIO` is one or more files or folders. Wildcards (`*.wav`) are expanded by vizsync itself, because Windows PowerShell does not expand them.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--script`, `-s` | required | Script file |
+| `--out`, `-o` | `out/` | Output folder |
+| `--text` | `quote` | `quote` or `inline` (see §1) |
+| `--mode` | `auto` | `auto`, `parts` or `per-paragraph` (see §3) |
+| `--model` | `small.en` | Speech model: `tiny.en`, `base.en`, `small.en`, `medium.en`, or another faster-whisper model name or path |
+| `--language` | `en` | Language code of the spoken audio |
+| `--device` | `auto` | `auto`, `cpu` or `cuda` |
+| `--offset` | `0` | Seconds added to every time (for example a 5 s intro before the narration) |
+| `--gap` | `0` | Seconds of silence assumed between consecutive audio parts (`parts` mode) |
+| `--min-confidence` | `0.8` | Below this a paragraph is reported as `low_confidence` |
+| `--strict` | off | Exit code 1 if any warning was produced |
+| `--formats` | `json,csv,chapters,edl` | Comma-separated list of files to write |
+
+Exit codes: `0` success (warnings allowed unless `--strict`), `1` user error (bad script, missing file, invalid option), `2` alignment finished but at least one paragraph is `missing`.
+
+### `vizsync durations TIMING_JSON --map CHART_MAP [--pad SECONDS] [-o FILE]`
+
+Computes chart clip timing for vizreel (see §6). Writes YAML to `-o` or prints it.
+
+## 3. Audio input modes
+
+| Mode | Input | What vizsync does |
+|---|---|---|
+| `parts` | One or more files in playback order | Concatenates them into one timeline: part 2 starts at `duration(part 1) + gap`, and so on |
+| `per-paragraph` | One file per paragraph, name contains the identifier (`P08.wav`, `p8_take2.mp3`) | No speech recognition. Each file is one paragraph; paragraphs are laid end to end in script order |
+| `auto` | Anything | If every file name contains a paragraph identifier that exists in the script, `per-paragraph`; otherwise `parts` |
+
+A single file is `parts` with one part.
+
+Order in `parts` mode: files are sorted by natural order (`part2` before `part10`) when given as a folder or wildcard. Files listed explicitly keep the order given.
+
+Supported audio formats: whatever PyAV can decode (wav, mp3, m4a, flac, ogg, and others).
+
+In `per-paragraph` mode a script paragraph without a file is `missing`. A file with no matching paragraph is a warning.
+
+## 4. Time model
+
+- Time zero is the first sample of the first audio part, plus `--offset`.
+- All times are seconds as decimal numbers with millisecond precision in JSON, and `MM:SS.s` (or `H:MM:SS.s` above an hour) in text output.
+- A paragraph has `start` (first spoken word) and `end` (last spoken word). Silence between paragraphs belongs to neither.
+
+## 5. Output files
+
+All written to the output folder. File names are fixed.
+
+### `timing.json`
+
+```json
+{
+  "version": 1,
+  "tool": "vizsync 0.1.0",
+  "script": "northwind.md",
+  "mode": "parts",
+  "offset": 0.0,
+  "total_duration": 71.4,
+  "audio": [
+    { "file": "part1.wav", "offset": 0.0, "duration": 38.2 },
+    { "file": "part2.wav", "offset": 38.2, "duration": 33.2 }
+  ],
+  "chapters": [
+    { "title": "The Hook", "start": 0.4, "end": 21.1, "first": "P1", "last": "P2" }
+  ],
+  "paragraphs": [
+    {
+      "id": "P1",
+      "chapter": "The Hook",
+      "start": 0.4,
+      "end": 9.8,
+      "duration": 9.4,
+      "confidence": 0.98,
+      "status": "ok"
+    }
+  ],
+  "warnings": []
+}
+```
+
+`status` is one of `ok`, `low_confidence`, `missing`. A `missing` paragraph has `start`, `end` and `duration` set to `null`.
+
+A chapter's `start` is the `start` of its first paragraph that is not `missing`; its `end` is the `end` of its last such paragraph.
+
+### `timing.csv`
+
+Header: `id,chapter,start,end,duration,confidence,status`. Times in seconds. UTF-8 with BOM (so Excel on Windows opens it correctly). Empty cells for `null`.
+
+### `chapters.txt`
+
+YouTube description format, one line per chapter: `MM:SS Title`. Rules applied:
+
+- The first chapter is written at `00:00` (YouTube requires it), even if narration starts later. If the real start differs by more than 1 s a warning says so.
+- Times are rounded down to whole seconds.
+- Warnings when there are fewer than 3 chapters or a chapter is shorter than 10 s (YouTube ignores the list in those cases).
+
+### `markers.edl`
+
+An EDL file that DaVinci Resolve imports as timeline markers (Timeline → Import → Timeline Markers from EDL). One marker per paragraph, named with the identifier, at the paragraph `start`. Frame rate is set with `--fps` (default 30). Import into Resolve must be verified by hand in milestone M4 and the result documented in the README.
+
+## 6. Chart timing for vizreel
+
+`vizsync durations` reads `timing.json` and a chart map, and reports when each chart clip goes on the timeline and how long it must be. It is written against vizreel 0.11 (`docs/SPEC.md` there is the source of truth for `duration`, `step_duration` and sequences). vizreel still takes chart timing from the YAML spec; CSV files in vizreel only carry a chart's data (bars, series, events), not its timing.
+
+### Chart map
+
+```yaml
+version: 1
+charts:
+  peak-valuation:            # a single clip
+    paragraphs: [P2]
+  valuation:                 # one clip covering two paragraphs
+    paragraphs: [P3, P4]
+  history:                   # a vizreel sequence: one clip per paragraph, in order
+    sequence: true
+    paragraphs: [P6, P7, P8]
+```
+
+- The key is the vizreel chart `id`.
+- `paragraphs` lists one or more paragraph identifiers. They must be consecutive in the script.
+- With `sequence: true`, each paragraph is one clip of the sequence, in the order listed (vizreel allows 2–8 clips).
+- Unknown identifiers or `missing` paragraphs are errors.
+
+### Result
+
+```yaml
+charts:
+  peak-valuation:
+    start: 10.6
+    duration: 10.5
+  valuation:
+    start: 21.9
+    duration: 27.6
+  history:
+    start: 62.0
+    duration: 14.1          # first clip: goes into `duration`
+    step_duration: 12.6     # longest later clip: goes into `step_duration`
+    clips:
+      - { n: 1, start: 62.0, duration: 14.1 }
+      - { n: 2, start: 76.1, duration: 13.4 }
+      - { n: 3, start: 89.5, duration: 12.6 }
+```
+
+Single clip: `start` = start of the first paragraph (where to place the clip in the editor). `duration` = end of the last paragraph minus that start, plus `--pad` (default `0`).
+
+Sequence: clips are cut back to back, so clip *k* runs from the start of paragraph *k* to the start of paragraph *k+1* (no gap on the timeline); the last clip runs to the end of its paragraph plus `--pad`. `duration` is the first clip's length. vizreel has one `step_duration` for all later clips, so vizsync reports the longest later clip: a clip can be trimmed in the editor (it holds its last frame) but not made longer than it was rendered. The exact per-clip times are in `clips`.
+
+Warnings: a clip shorter than 2 seconds (vizreel's minimum `duration`); for sequences, a later clip much shorter than the reported `step_duration`.
+
+Values are in seconds and go into the vizreel spec's `duration:` / `step_duration:` fields.
+
+vizsync never edits a vizreel spec file itself, because rewriting YAML with a standard library drops the comments that scripts rely on for fact references.
+
+## 7. Warnings
+
+Each warning is a short sentence with the identifier. Examples: `P17: low confidence (0.62). The narration may differ from the script.`, `P23: not found in the audio.`, `chapters: only 2 chapters, YouTube needs at least 3.` Warnings are printed and stored in `timing.json`.
+
+## 8. Errors
+
+Expected failures print a message a user can act on and exit with code 1. Examples: `Script line 41: P9 has no blockquote (use --text inline?)`, `Audio file not found: part3.wav`. Messages name the file and line whenever possible.

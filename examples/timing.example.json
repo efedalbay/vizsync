@@ -1,0 +1,113 @@
+{
+  "version": 1,
+  "tool": "vizsync 0.1.0 (hand-written example)",
+  "script": "northwind-script.md",
+  "mode": "parts",
+  "offset": 0.0,
+  "total_duration": 101.8,
+  "audio": [
+    {
+      "file": "northwind.wav",
+      "offset": 0.0,
+      "duration": 101.8
+    }
+  ],
+  "chapters": [
+    {
+      "title": "The Hook",
+      "start": 0.4,
+      "end": 21.1,
+      "first": "P1",
+      "last": "P2"
+    },
+    {
+      "title": "The Rise",
+      "start": 21.9,
+      "end": 61.2,
+      "first": "P3",
+      "last": "P5"
+    },
+    {
+      "title": "The Fall",
+      "start": 62.0,
+      "end": 101.0,
+      "first": "P6",
+      "last": "P8"
+    }
+  ],
+  "paragraphs": [
+    {
+      "id": "P1",
+      "chapter": "The Hook",
+      "start": 0.4,
+      "end": 9.8,
+      "duration": 9.4,
+      "confidence": 1.0,
+      "status": "ok"
+    },
+    {
+      "id": "P2",
+      "chapter": "The Hook",
+      "start": 10.6,
+      "end": 21.1,
+      "duration": 10.5,
+      "confidence": 1.0,
+      "status": "ok"
+    },
+    {
+      "id": "P3",
+      "chapter": "The Rise",
+      "start": 21.9,
+      "end": 38.0,
+      "duration": 16.1,
+      "confidence": 1.0,
+      "status": "ok"
+    },
+    {
+      "id": "P4",
+      "chapter": "The Rise",
+      "start": 38.9,
+      "end": 49.5,
+      "duration": 10.6,
+      "confidence": 1.0,
+      "status": "ok"
+    },
+    {
+      "id": "P5",
+      "chapter": "The Rise",
+      "start": 50.3,
+      "end": 61.2,
+      "duration": 10.9,
+      "confidence": 1.0,
+      "status": "ok"
+    },
+    {
+      "id": "P6",
+      "chapter": "The Fall",
+      "start": 62.0,
+      "end": 75.4,
+      "duration": 13.4,
+      "confidence": 1.0,
+      "status": "ok"
+    },
+    {
+      "id": "P7",
+      "chapter": "The Fall",
+      "start": 76.1,
+      "end": 88.7,
+      "duration": 12.6,
+      "confidence": 1.0,
+      "status": "ok"
+    },
+    {
+      "id": "P8",
+      "chapter": "The Fall",
+      "start": 89.5,
+      "end": 101.0,
+      "duration": 11.5,
+      "confidence": 1.0,
+      "status": "ok"
+    }
+  ],
+  "warnings": []
+}
