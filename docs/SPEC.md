@@ -68,9 +68,11 @@ A heading without paragraphs under it does not create a chapter, and `Intro` exi
 
 Global: `vizsync --version`, `vizsync --help`. All commands accept `--debug` (show tracebacks).
 
-### `vizsync check SCRIPT`
+### `vizsync check SCRIPT [--text quote|inline]`
 
-Parses the script only. Prints the number of chapters and paragraphs, and every problem found (all of them, not just the first). Exit code 0 if the script is valid, 1 otherwise. No audio, no model download.
+Parses the script only. No audio, no model download. `--text` works as in `align` (default `quote`), because it decides what a valid script is (see §1).
+
+If the script is valid it prints `OK: 3 chapters, 8 paragraphs` and exits with code 0. Otherwise it prints every problem found (all of them, not just the first), one per line as `FILE line N: message`, then `N problems found in FILE`, and exits with code 1. Problems go to standard error.
 
 ### `vizsync align AUDIO... --script SCRIPT [options]`
 
