@@ -66,6 +66,8 @@ vizsync/
 ├── .claude/agents/algorithm-expert.md
 ├── docs/  (SPEC.md, ARCHITECTURE.md, ROADMAP.md)
 ├── examples/
+├── scripts/
+│   └── check-local.ps1        ← checks Efe runs on his Windows computer
 ├── src/vizsync/
 │   ├── __init__.py            ← version
 │   ├── __main__.py

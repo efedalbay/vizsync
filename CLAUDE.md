@@ -60,6 +60,7 @@ uv run pytest -m "not slow"               # fast unit tests
 uv run pytest -m slow                     # real-model tests (needs a model download)
 uv run ruff check . ; uv run ruff format .
 uv run mypy src
+.\scripts\check-local.ps1                # checks that run on Efe's computer (pull, sync, tests, version)
 ```
 
 ## Rules
