@@ -8,9 +8,13 @@
 
 .PARAMETER NoModel
     Skip the steps that need the real speech model. CI uses this.
+
+.PARAMETER Speed
+    Also measure recognition speed on a clip of about 13 minutes (takes a few minutes).
 #>
 param(
-    [switch]$NoModel
+    [switch]$NoModel,
+    [switch]$Speed
 )
 
 $ErrorActionPreference = "Stop"
@@ -80,6 +84,29 @@ else {
     Invoke-Step "align: fixture clip" {
         uv run vizsync align tests/fixtures/northwind.wav --script examples/northwind-script.md --out out/fixture
     }
+}
+
+# M3: recognition speed on about 13 minutes of audio, for the README. Only with -Speed.
+if ($Speed -and -not $NoModel -and (Test-Path "tests/fixtures/northwind.wav")) {
+    Invoke-Step "speed: build a 13-minute clip" {
+        uv run python scripts/make-long-clip.py tests/fixtures/northwind.wav out/speed/long.wav --minutes 13
+    }
+    Invoke-Step "speed: this computer" {
+        $cpu = Get-CimInstance Win32_Processor | Select-Object -First 1
+        $ram = [math]::Round((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
+        Write-Host "CPU: $($cpu.Name), $($cpu.NumberOfCores) cores, $($cpu.NumberOfLogicalProcessors) threads"
+        Write-Host "RAM: $ram GB"
+    }
+    Write-Host ""
+    Write-Host "== speed: align 13 minutes (small.en)" -ForegroundColor Cyan
+    uv run vizsync align out/speed/long.wav --script examples/northwind-script.md --out out/speed --formats json
+    # Exit code 2 would only mean a paragraph was not found; speed is what counts here.
+    if ($LASTEXITCODE -gt 2) {
+        Write-Host "FAILED: speed: align 13 minutes (exit code $LASTEXITCODE)" -ForegroundColor Red
+        exit 1
+    }
+    $global:LASTEXITCODE = 0
+    Write-Host "OK: speed: align 13 minutes" -ForegroundColor Green
 }
 
 Write-Host ""
