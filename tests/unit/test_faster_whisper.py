@@ -6,7 +6,7 @@ import pytest
 
 from vizsync.asr import faster_whisper as fw
 from vizsync.asr.base import Word
-from vizsync.errors import TranscriptionError
+from vizsync.errors import ModelLoadError, TranscriptionError
 
 
 def fake_word(text: str, start: float, end: float) -> SimpleNamespace:
@@ -108,7 +108,7 @@ def test_load_failure_explains_the_download() -> None:
         raise OSError("no route to host")
 
     transcriber = fw.FasterWhisperTranscriber("small.en", model_factory=factory)
-    with pytest.raises(TranscriptionError) as info:
+    with pytest.raises(ModelLoadError) as info:
         transcriber.transcribe(Path("a.wav"), language="en")
     message = str(info.value)
     assert "small.en" in message

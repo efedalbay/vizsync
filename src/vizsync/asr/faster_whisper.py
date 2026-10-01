@@ -10,7 +10,7 @@ from types import ModuleType
 from typing import Any
 
 from vizsync.asr.base import Word
-from vizsync.errors import TranscriptionError
+from vizsync.errors import ModelLoadError, TranscriptionError
 
 MODEL_SIZES_MB = {"tiny.en": 75, "base.en": 145, "small.en": 484, "medium.en": 1500}
 """Approximate download size of the standard English models, for the message before a download."""
@@ -69,7 +69,8 @@ class FasterWhisperTranscriber:
         """Return the recognized words of ``audio``, with times relative to its start.
 
         Raises:
-            TranscriptionError: If the model cannot be loaded or the audio cannot be recognized.
+            ModelLoadError: If the model cannot be loaded.
+            TranscriptionError: If the audio cannot be recognized.
         """
         model = self._loaded_model()
         try:
@@ -91,7 +92,7 @@ class FasterWhisperTranscriber:
             try:
                 self._model = self._model_factory(self.model_name, device, compute_type)
             except Exception as error:
-                raise TranscriptionError(
+                raise ModelLoadError(
                     f"Could not load the speech model '{self.model_name}' ({error}). "
                     "The first use downloads the model, so it needs an internet connection. "
                     "To use a model you already have, pass its folder with --model."
