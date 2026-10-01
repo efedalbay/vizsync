@@ -4,7 +4,9 @@ The library is imported only when a model is needed, so commands that do not lis
 start fast.
 """
 
+import ctypes
 import logging
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
@@ -17,6 +19,12 @@ MODEL_SIZES_MB = {"tiny.en": 75, "base.en": 145, "small.en": 484, "medium.en": 1
 """Approximate download size of the standard English models, for the message before a download."""
 
 _COMPUTE_TYPES = {"cpu": "int8", "cuda": "float16"}
+
+_CUDA_LIBRARIES = {
+    "win32": ("cublas64_12.dll", "cudnn64_9.dll"),
+    "linux": ("libcublas.so.12", "libcudnn.so.9"),
+}
+"""The NVIDIA libraries (cuBLAS 12, cuDNN 9) the GPU needs, which come with the CUDA toolkit."""
 
 ModelFactory = Callable[[str, str, str], Any]
 """``(model name or folder, device, compute type)`` to a loaded model."""
@@ -89,7 +97,13 @@ class FasterWhisperTranscriber:
 
     def _loaded_model(self) -> Any:
         if self._model is None:
-            device, compute_type = resolve_device(self._device, cuda_available=_cuda_available())
+            device, compute_type = resolve_device(self._device, cuda_available=_cuda_usable())
+            if device == "cuda" and not _cuda_libraries_load():
+                raise ModelLoadError(
+                    "The GPU cannot be used: the NVIDIA libraries cuBLAS 12 and cuDNN 9 could not "
+                    "be loaded. Install them (see the faster-whisper documentation) or use "
+                    "--device cpu."
+                )
             try:
                 self._model = self._model_factory(self.model_name, device, compute_type)
             except Exception as error:
@@ -114,10 +128,35 @@ def _load_model(name: str, device: str, compute_type: str) -> Any:
     return _library().WhisperModel(name, device=device, compute_type=compute_type)
 
 
-def _cuda_available() -> bool:
+def _cuda_usable() -> bool:
+    """Whether the GPU can really be used: a device is there and its libraries load.
+
+    A computer with an NVIDIA GPU but without cuBLAS and cuDNN reports a device, then fails
+    (or hangs) the first time the model runs, so ``auto`` must not pick the GPU for it.
+    """
+    return _cuda_device_count() > 0 and _cuda_libraries_load()
+
+
+def _cuda_device_count() -> int:
     try:
         import ctranslate2
 
-        return int(ctranslate2.get_cuda_device_count()) > 0
+        return int(ctranslate2.get_cuda_device_count())
     except Exception:
+        return 0
+
+
+def _cuda_libraries_load() -> bool:
+    names = _CUDA_LIBRARIES.get(sys.platform, ())
+    if not names:
         return False
+    for name in names:
+        try:
+            if sys.platform == "win32":
+                # winmode=0 searches PATH too, where the CUDA toolkit puts its libraries.
+                ctypes.WinDLL(name, winmode=0)
+            else:
+                ctypes.CDLL(name)
+        except OSError:
+            return False
+    return True

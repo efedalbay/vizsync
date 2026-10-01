@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -7,6 +8,12 @@ import pytest
 from vizsync.asr import faster_whisper as fw
 from vizsync.asr.base import Word
 from vizsync.errors import ModelLoadError, TranscriptionError
+
+
+@pytest.fixture(autouse=True)
+def no_gpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Tests run as if the computer had no NVIDIA GPU, whatever it really has."""
+    monkeypatch.setattr(fw, "_cuda_device_count", lambda: 0)
 
 
 def fake_word(text: str, start: float, end: float) -> SimpleNamespace:
@@ -168,3 +175,78 @@ def test_transcriber_reports_its_cache_state(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(fw, "is_model_cached", lambda name: name == "base.en")
     assert fw.FasterWhisperTranscriber("base.en").is_cached() is True
     assert fw.FasterWhisperTranscriber("small.en").is_cached() is False
+
+
+# --- The GPU ------------------------------------------------------------------------------------
+
+
+def with_gpu(monkeypatch: pytest.MonkeyPatch, *, libraries: bool) -> None:
+    monkeypatch.setattr(fw, "_cuda_device_count", lambda: 1)
+    monkeypatch.setattr(fw, "_cuda_libraries_load", lambda: libraries)
+
+
+def test_auto_uses_the_gpu_when_the_device_and_its_libraries_work(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with_gpu(monkeypatch, libraries=True)
+    transcriber, created = make_transcriber(FakeModel([]))
+    transcriber.transcribe(Path("a.wav"), language="en")
+    assert created == [("small.en", "cuda", "float16")]
+
+
+def test_auto_uses_the_cpu_when_the_gpu_libraries_are_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with_gpu(monkeypatch, libraries=False)
+    transcriber, created = make_transcriber(FakeModel([]))
+    transcriber.transcribe(Path("a.wav"), language="en")
+    assert created == [("small.en", "cpu", "int8")]
+
+
+def test_the_libraries_are_not_probed_without_a_gpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    def probe() -> bool:
+        raise AssertionError("the libraries should not be probed")
+
+    monkeypatch.setattr(fw, "_cuda_libraries_load", probe)
+    assert fw._cuda_usable() is False
+
+
+def test_cuda_asked_for_without_its_libraries_explains_and_does_not_load(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with_gpu(monkeypatch, libraries=False)
+    transcriber, created = make_transcriber(FakeModel([]), device="cuda")
+    with pytest.raises(ModelLoadError) as info:
+        transcriber.transcribe(Path("a.wav"), language="en")
+    message = str(info.value)
+    assert "cuBLAS" in message and "cuDNN" in message and "--device cpu" in message
+    assert created == []
+
+
+def test_cuda_asked_for_with_its_libraries_loads(monkeypatch: pytest.MonkeyPatch) -> None:
+    with_gpu(monkeypatch, libraries=True)
+    transcriber, created = make_transcriber(FakeModel([]), device="cuda")
+    transcriber.transcribe(Path("a.wav"), language="en")
+    assert created == [("small.en", "cuda", "float16")]
+
+
+def present_and_missing_libraries() -> tuple[str, str]:
+    present = "kernel32.dll" if sys.platform == "win32" else "libc.so.6"
+    return present, "this-library-does-not-exist-vizsync"
+
+
+def test_library_probe_finds_a_library_that_exists(monkeypatch: pytest.MonkeyPatch) -> None:
+    present, _ = present_and_missing_libraries()
+    monkeypatch.setattr(fw, "_CUDA_LIBRARIES", {sys.platform: (present,)})
+    assert fw._cuda_libraries_load() is True
+
+
+def test_library_probe_fails_if_any_library_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    present, missing = present_and_missing_libraries()
+    monkeypatch.setattr(fw, "_CUDA_LIBRARIES", {sys.platform: (present, missing)})
+    assert fw._cuda_libraries_load() is False
+
+
+def test_library_probe_says_no_on_a_platform_without_cuda(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(fw, "_CUDA_LIBRARIES", {})
+    assert fw._cuda_libraries_load() is False
