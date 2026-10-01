@@ -93,9 +93,11 @@ Aligns the script to the audio and writes the output files.
 | `--gap` | `0` | Seconds of silence assumed between consecutive audio parts (`parts` mode) |
 | `--min-confidence` | `0.8` | Below this a paragraph is reported as `low_confidence` |
 | `--strict` | off | Exit code 1 if any warning was produced |
-| `--formats` | `json,csv,chapters,edl` | Comma-separated list of files to write |
+| `--formats` | `json,csv,chapters,edl` | Comma-separated list of files to write. `chapters` and `edl` are not implemented yet: asking for them prints a notice and skips them |
 
-Exit codes: `0` success (warnings allowed unless `--strict`), `1` user error (bad script, missing file, invalid option), `2` alignment finished but at least one paragraph is `missing`.
+Exit codes: `0` success (warnings allowed unless `--strict`), `1` user error (bad script, missing file, invalid option or value, unwritable output folder), `2` alignment finished but at least one paragraph is `missing`. If a paragraph is `missing`, the exit code is `2` even with `--strict`.
+
+What it prints: one line per paragraph (`P3    00:21.9 -> 00:38.0    16.1 s  ok`; a low-confidence line also shows the confidence, a missing one reads `(not found)`), then the count of `ok`, low-confidence and missing paragraphs. Warnings, progress, and in `parts` mode the audio length and the time spent on speech recognition and on matching go to standard error. The first use of a speech model prints a notice that the model is being downloaded. The output folder is created if needed. A wrong option or value is a user error with exit code `1`.
 
 ### `vizsync durations TIMING_JSON --map CHART_MAP [--pad SECONDS] [-o FILE]`
 
@@ -244,7 +246,7 @@ vizsync never edits a vizreel spec file itself, because rewriting YAML with a st
 
 ## 7. Warnings
 
-Each warning is a short sentence with the identifier. Examples: `P17: low confidence (0.62). The narration may differ from the script.`, `P23: not found in the audio.`, `chapters: only 2 chapters, YouTube needs at least 3.` Warnings are printed and stored in `timing.json`.
+Each warning is a short sentence with the identifier. Examples: `P17: low confidence (0.62). The narration may differ from the script.`, `P23: not found in the audio.` (`parts` mode) or `P23: no audio file.` (`per-paragraph` mode), `notes.wav: matches no paragraph of the script, ignored.`, `chapters: only 2 chapters, YouTube needs at least 3.` Warnings are printed and stored in `timing.json`.
 
 ## 8. Errors
 
