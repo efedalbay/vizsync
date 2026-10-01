@@ -163,11 +163,19 @@ All written to the output folder. File names are fixed.
 
 `status` is one of `ok`, `low_confidence`, `missing`. A `missing` paragraph has `start`, `end` and `duration` set to `null`.
 
+Details:
+
+- `mode` is `parts` or `per-paragraph` (the mode actually used, never `auto`).
+- `audio` lists the files by file name only. In `parts` mode they are in playback order; in `per-paragraph` mode, in script order. `offset` is where the file starts on the timeline, so it includes `--offset`. `total_duration` is the length of the audio (durations plus gaps) and does not include `--offset`.
+- `paragraphs` are in script order and `chapters` in script order. A chapter's `first` and `last` are the identifiers of its first and last paragraph in the script, whether or not they are missing.
+- All times, `duration` and `confidence` are rounded to three decimals. In `per-paragraph` mode `confidence` is `1.0` for a paragraph with a file and `0.0` for one without.
+- The file is UTF-8 (no byte order mark), indented by two spaces, and ends with a newline.
+
 A chapter's `start` is the `start` of its first paragraph that is not `missing`; its `end` is the `end` of its last such paragraph.
 
 ### `timing.csv`
 
-Header: `id,chapter,start,end,duration,confidence,status`. Times in seconds. UTF-8 with BOM (so Excel on Windows opens it correctly). Empty cells for `null`.
+Header: `id,chapter,start,end,duration,confidence,status`. One row per paragraph, in script order, with the same values as in `timing.json`. Times in seconds. UTF-8 with BOM (so Excel on Windows opens it correctly). Empty cells for `null`. Cells with commas or quotes are quoted.
 
 ### `chapters.txt`
 
