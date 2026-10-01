@@ -109,13 +109,15 @@ Computes chart clip timing for vizreel (see §6). Writes YAML to `-o` or prints 
 | `per-paragraph` | One file per paragraph, name contains the identifier (`P08.wav`, `p8_take2.mp3`) | No speech recognition. Each file is one paragraph; paragraphs are laid end to end in script order |
 | `auto` | Anything | If every file name contains a paragraph identifier that exists in the script, `per-paragraph`; otherwise `parts` |
 
+The identifier in a file name is `P` (any case) followed by digits, with no letter or digit directly before the `P` and no digit directly after the number: `P08.wav`, `p8_take2.mp3` and `narration_P3_final.wav` name P8, P8 and P3; `part1.wav` and `xP3.wav` name none. If a name holds several, the first counts.
+
 A single file is `parts` with one part.
 
-Order in `parts` mode: files are sorted by natural order (`part2` before `part10`) when given as a folder or wildcard. Files listed explicitly keep the order given.
+Order in `parts` mode: files are sorted by natural order (`part2` before `part10`) when given as a folder or wildcard. Files listed explicitly keep the order given. A folder is read without its subfolders. Folders and wildcards pick up only files with a known audio extension (`.wav`, `.mp3`, `.m4a`, `.flac`, `.ogg`, `.oga`, `.opus`, `.aac`, `.wma`, `.webm`, `.mp4`); a file named in full is accepted with any extension. A named file that does not exist, and a folder or wildcard that finds no audio file, are errors.
 
 Supported audio formats: whatever PyAV can decode (wav, mp3, m4a, flac, ogg, and others).
 
-In `per-paragraph` mode a script paragraph without a file is `missing`. A file with no matching paragraph is a warning.
+In `per-paragraph` mode a script paragraph without a file is `missing`. A file with no matching paragraph is ignored, with a warning. Two files for one paragraph are an error. If no file matches any paragraph, that is an error too.
 
 ## 4. Time model
 
