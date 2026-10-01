@@ -117,7 +117,7 @@ class Transcriber(Protocol):
 
 - `FasterWhisperTranscriber` is the only real implementation in v1.
 - Tests use a `FakeTranscriber` that returns hand-written words, including deliberate mistakes. This is how the aligner is tested without audio or a model.
-- The pipeline calls the transcriber once per audio part and shifts the returned times by the part's offset. Long single files are handled inside faster-whisper (it processes long audio in windows and the voice-activity filter skips silence).
+- The pipeline calls the transcriber once per audio part and shifts the returned times by the part's offset. Long single files are handled inside faster-whisper (it processes long audio in windows and the voice-activity filter skips silence). The voice-activity filter pads each stretch of speech by 100 ms instead of the library's 400 ms (`DEFAULT_VAD_PARAMETERS`): with 400 ms, paragraph starts moved by up to 0.6 s and differed between a whole clip and the same clip cut into parts.
 - The model is downloaded on first use to the standard Hugging Face cache. The tool prints a clear message before a download and a clear error if the download fails.
 
 ## The aligner (the hard part)
