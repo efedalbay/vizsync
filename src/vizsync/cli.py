@@ -18,9 +18,16 @@ from vizsync.asr.faster_whisper import FasterWhisperTranscriber, download_size_m
 from vizsync.audio.inputs import AudioMode, expand_inputs, plan_audio
 from vizsync.audio.timeline import read_duration
 from vizsync.errors import ScriptParseError, VizsyncError
+from vizsync.integrations.chartmap import load_chart_map
+from vizsync.integrations.vizreel import (
+    compute_chart_timing,
+    format_chart_timing,
+    write_chart_timing,
+)
 from vizsync.match.spans import DEFAULT_MIN_CONFIDENCE, ParagraphStatus
 from vizsync.output.edl import DEFAULT_FPS, DEFAULT_TIMELINE_START, EdlSettings
 from vizsync.output.files import FORMATS, prepare_outputs, write_outputs
+from vizsync.output.timing import read_timing_json
 from vizsync.pipeline import AlignmentResult, ParagraphResult, exit_code, run_alignment
 from vizsync.script.models import TextMode
 from vizsync.script.parser import load_script
@@ -247,6 +254,38 @@ def align(
     code = exit_code(outputs.result, strict=strict)
     if code:
         raise typer.Exit(code)
+
+
+@app.command()
+def durations(
+    timing: Annotated[Path, typer.Argument(help="timing.json written by 'vizsync align'.")],
+    chart_map: Annotated[
+        Path, typer.Option("--map", help="Chart map (YAML): which paragraphs each chart covers.")
+    ],
+    pad: Annotated[
+        float,
+        typer.Option(
+            "--pad",
+            min=0.0,
+            help="Seconds added to the end of a clip (the last one of a sequence).",
+        ),
+    ] = 0.0,
+    out: Annotated[
+        Path | None, typer.Option("--out", "-o", help="Write the YAML here instead of printing it.")
+    ] = None,
+    debug: Annotated[bool, typer.Option("--debug", help="Show tracebacks for errors.")] = False,
+) -> None:
+    """Work out when each vizreel chart clip goes on the timeline and how long it must be."""
+    with _handle_errors(debug):
+        result = compute_chart_timing(read_timing_json(timing), load_chart_map(chart_map), pad=pad)
+        text = format_chart_timing(result)
+        for warning in result.warnings:
+            _print(f"warning: {warning}", "yellow", error=True)
+        if out is None:
+            typer.echo(text, nl=False)
+        else:
+            write_chart_timing(text, out)
+            _print(f"Written: {out}", "green")
 
 
 def _download_notice(model: str) -> str:

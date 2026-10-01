@@ -1,10 +1,11 @@
 """``timing.json``: the full result, and the source of truth for the other output files."""
 
+import json
 from pathlib import Path
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
-from vizsync.errors import OutputError
+from vizsync.errors import OutputError, TimingFileError
 from vizsync.pipeline import AlignmentResult
 
 TIMING_VERSION = 1
@@ -106,6 +107,36 @@ def write_timing_json(timing: Timing, path: Path) -> None:
             file.write(text)
     except OSError as error:
         raise OutputError(f"Cannot write the file ({error.strerror})", path=path) from None
+
+
+def read_timing_json(path: Path) -> Timing:
+    """Read a ``timing.json`` written by vizsync.
+
+    Raises:
+        TimingFileError: If the file cannot be read, is not JSON, is not a vizsync result, or has
+            another version.
+    """
+    try:
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
+    except OSError as error:
+        raise TimingFileError(
+            f"Cannot read the timing file ({error.strerror})", path=path
+        ) from None
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        raise TimingFileError("The timing file is not valid JSON", path=path) from None
+    try:
+        timing = Timing.model_validate(data)
+    except ValidationError:
+        raise TimingFileError(
+            "This is not a vizsync timing file (run 'vizsync align' to make one)", path=path
+        ) from None
+    if timing.version != TIMING_VERSION:
+        raise TimingFileError(
+            f"The timing file has version {timing.version}; this vizsync reads version "
+            f"{TIMING_VERSION}",
+            path=path,
+        )
+    return timing
 
 
 def _ms(value: float | None) -> float | None:

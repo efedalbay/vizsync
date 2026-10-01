@@ -95,13 +95,14 @@ vizsync/
 │   │   ├── spans.py           ← alignment → paragraph start/end/confidence
 │   │   └── pace.py            ← paragraphs far longer than their words (warning)
 │   ├── output/
-│   │   ├── timing.py          ← timing.json models and writer
+│   │   ├── timing.py          ← timing.json models, writer and reader
 │   │   ├── table.py           ← csv
 │   │   ├── chapters.py        ← chapters.txt
 │   │   ├── edl.py             ← markers.edl
 │   │   └── files.py           ← which files to write; chapter warnings join the result first
 │   └── integrations/
-│       └── vizreel.py         ← chart map → start/duration
+│       ├── chartmap.py        ← chart map file → validated model
+│       └── vizreel.py         ← paragraph times + chart map → start/duration (pure) and YAML text
 └── tests/
     ├── unit/                  ← fast, no model, no audio
     ├── fixtures/              ← short audio clip + matching script

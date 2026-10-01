@@ -70,6 +70,11 @@ Invoke-Step "aligner benchmark" {
     uv run pytest tests/unit/test_aligner_benchmark.py --durations=3
 }
 
+# M5: chart timing for vizreel on the shipped example. It needs no model, so CI runs it too.
+Invoke-Step "durations: example" {
+    uv run vizsync durations examples/timing.example.json --map examples/chart-map.yaml
+}
+
 # M3: the real speech model on the fixture clip. The first run downloads the model.
 if ($NoModel) {
     Write-Host ""

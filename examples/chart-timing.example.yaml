@@ -1,0 +1,15 @@
+charts:
+  peak-valuation:
+    start: 10.6
+    duration: 10.5
+  valuation:
+    start: 21.9
+    duration: 27.6
+  collapse:
+    start: 62.0
+    duration: 14.1
+    step_duration: 13.4
+    clips:
+      - { n: 1, start: 62.0, duration: 14.1 }
+      - { n: 2, start: 76.1, duration: 13.4 }
+      - { n: 3, start: 89.5, duration: 11.5 }

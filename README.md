@@ -4,7 +4,7 @@ Find out where each paragraph of your script starts and ends in your narration a
 
 vizsync takes a narration recording and the numbered script it was read from, and returns the start and end time of every paragraph. It is built for video makers who write a script first, record a voice-over, and then need to know exactly when to place charts, cut footage or add chapter markers.
 
-> **Status: in development, not released.** `vizsync check` and `vizsync align` (with `timing.json`, `timing.csv`, `chapters.txt` and `markers.edl`) work from source. The vizreel chart timing is not implemented yet, the DaVinci Resolve import of `markers.edl` has not been tried in Resolve yet, and the package is not on PyPI yet.
+> **Status: in development, not released.** `vizsync check` and `vizsync align` (with `timing.json`, `timing.csv`, `chapters.txt` and `markers.edl`) work from source. `vizsync durations` (chart timing for vizreel) works too. The DaVinci Resolve import of `markers.edl` has not been tried in Resolve yet, and the package is not on PyPI yet.
 
 ## Why
 
@@ -31,7 +31,7 @@ Written to `out/`:
 | `chapters.txt` | Paste into a YouTube description |
 | `markers.edl` | Import as timeline markers in DaVinci Resolve |
 
-With a small map file, vizsync also works out how long each chart clip must be, for use with [vizreel](https://github.com/efedalbay/vizreel).
+With a small map file, vizsync also works out when each chart clip goes on the timeline and how long it must be, for use with [vizreel](https://github.com/efedalbay/vizreel) (see below).
 
 ## Script format
 
@@ -52,6 +52,50 @@ P2 — Then one decision changed everything.
 **DaVinci Resolve.** Run `vizsync align` with the frame rate of your timeline, for example `--fps 25`. In Resolve choose Timeline → Import → Timeline Markers from EDL and pick `markers.edl`. Resolve starts new timelines at `01:00:00:00`, which is what vizsync assumes; if your timeline starts at `00:00:00:00`, add `--timeline-start 00:00:00:00`.
 
 **CapCut.** CapCut cannot import markers from a file (none is known to vizsync). Open `timing.csv` in a spreadsheet, or `chapters.txt`, and place your cuts, text or charts at those times by hand.
+
+## Chart timing for vizreel
+
+The full flow, from script to vizreel spec:
+
+1. Write the script and check it: `vizsync check northwind.md`.
+2. Record the narration and align it: `vizsync align narration.wav --script northwind.md -o out`.
+3. Say which paragraphs each chart covers, in a chart map (`examples/chart-map.yaml`):
+
+   ```yaml
+   version: 1
+   charts:
+     peak-valuation:        # the vizreel chart id; one clip
+       paragraphs: [P2]
+     valuation:             # one clip over two paragraphs
+       paragraphs: [P3, P4]
+     collapse:              # a vizreel sequence: one clip per paragraph
+       sequence: true
+       paragraphs: [P6, P7, P8]
+   ```
+
+4. Work out the timing: `vizsync durations out/timing.json --map chart-map.yaml` (add `-o chart-timing.yaml` to write a file, `--pad 0.5` to give every clip half a second more at the end). For the example files in `examples/` it prints:
+
+   ```yaml
+   charts:
+     peak-valuation:
+       start: 10.6
+       duration: 10.5
+     valuation:
+       start: 21.9
+       duration: 27.6
+     collapse:
+       start: 62.0
+       duration: 14.1
+       step_duration: 13.4
+       clips:
+         - { n: 1, start: 62.0, duration: 14.1 }
+         - { n: 2, start: 76.1, duration: 13.4 }
+         - { n: 3, start: 89.5, duration: 11.5 }
+   ```
+
+5. Copy `duration` (and `step_duration` for a sequence) into the chart's entry in your vizreel spec, render with vizreel, and place each clip in your editor at its `start`. The clips of a sequence play back to back from the first `start`. vizsync never edits your spec, so the comments in it stay.
+
+A clip can be trimmed in the editor but not made longer than it was rendered, which is why a sequence reports the longest later clip as `step_duration`; the exact length of every clip is in `clips`.
 
 ## Audio input
 
