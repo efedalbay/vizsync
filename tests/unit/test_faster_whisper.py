@@ -101,6 +101,31 @@ def test_transcribe_asks_for_word_times_and_voice_activity_filtering() -> None:
     assert options["vad_filter"] is True
 
 
+def test_voice_activity_options_can_be_changed() -> None:
+    model = FakeModel([])
+    transcriber, _ = make_transcriber(
+        model, vad_parameters={"speech_pad_ms": 100, "min_silence_duration_ms": 300}
+    )
+    transcriber.transcribe(Path("a.wav"), language="en")
+    _, options = model.calls[0]
+    assert options["vad_filter"] is True
+    assert options["vad_parameters"] == {"speech_pad_ms": 100, "min_silence_duration_ms": 300}
+
+
+def test_voice_activity_filter_can_be_switched_off() -> None:
+    model = FakeModel([])
+    transcriber, _ = make_transcriber(model, vad_filter=False)
+    transcriber.transcribe(Path("a.wav"), language="en")
+    assert model.calls[0][1]["vad_filter"] is False
+
+
+def test_voice_activity_parameters_default_to_the_librarys_own() -> None:
+    model = FakeModel([])
+    transcriber, _ = make_transcriber(model)
+    transcriber.transcribe(Path("a.wav"), language="en")
+    assert model.calls[0][1]["vad_parameters"] is None
+
+
 def test_model_is_loaded_once_and_only_when_needed() -> None:
     model = FakeModel([])
     transcriber, created = make_transcriber(model, model="base.en", device="cpu")
