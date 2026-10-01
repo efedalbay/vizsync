@@ -65,6 +65,11 @@ Invoke-ExpectingExitCode "check: broken script exits with 1" 1 {
     uv run vizsync check tests/unit/fixtures/several_errors.md
 }
 
+# M2: the aligner benchmark on this computer. It must finish in under 10 seconds.
+Invoke-Step "aligner benchmark" {
+    uv run pytest tests/unit/test_aligner_benchmark.py --durations=3
+}
+
 Write-Host ""
 Write-Host "All checks passed." -ForegroundColor Green
 exit 0
