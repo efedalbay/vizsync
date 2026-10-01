@@ -92,7 +92,8 @@ vizsync/
 │   ├── match/
 │   │   ├── normalize.py       ← text → comparable words
 │   │   ├── aligner.py         ← script words ↔ recognized words
-│   │   └── spans.py           ← alignment → paragraph start/end/confidence
+│   │   ├── spans.py           ← alignment → paragraph start/end/confidence
+│   │   └── pace.py            ← paragraphs far longer than their words (warning)
 │   ├── output/
 │   │   ├── timing.py          ← timing.json models and writer
 │   │   ├── table.py           ← csv
@@ -166,6 +167,7 @@ For each paragraph:
 - `confidence` = matched script words in the paragraph, weighted by match similarity, divided by total script words in the paragraph.
 - `status`: `missing` if fewer than 30% of words matched (or none); `low_confidence` if below `--min-confidence`; otherwise `ok`.
 - A `missing` paragraph is never given invented times.
+- A found paragraph can still be wrong when the script text was read more than once: the aligner then picks words from different places and the paragraph spans minutes. `match/pace.py` flags a paragraph whose seconds per word exceed 3 times the median of all found paragraphs (and that lasts at least 5 s, with at least 3 found paragraphs) with a warning. The status stays `ok`; the warning is the only signal.
 
 ### Known hard cases (must be covered by tests)
 

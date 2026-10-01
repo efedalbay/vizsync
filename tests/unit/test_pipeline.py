@@ -352,3 +352,43 @@ def test_exit_code(
     statuses: list[ParagraphStatus], warnings: list[str], strict: bool, expected: int
 ) -> None:
     assert exit_code(make_result(statuses, warnings), strict=strict) == expected
+
+
+# --- Paragraphs far longer than their words ---------------------------------------------------
+
+
+def delayed(words: list[Word], from_index: int, seconds: float) -> list[Word]:
+    """Move every word from ``from_index`` on ``seconds`` later."""
+    later = [
+        Word(text=w.text, start=w.start + seconds, end=w.end + seconds) for w in words[from_index:]
+    ]
+    return words[:from_index] + later
+
+
+def test_a_paragraph_spread_over_a_long_stretch_gets_a_warning() -> None:
+    # P1 has 7 words; the recognizer heard its last word 60 s after the others.
+    words = delayed(narration("P1", "P2", "P3", "P4"), 6, 60.0)
+    result = run_parts(FakeTranscriber(words), parts_plan("all.wav"), {"all.wav": 100.0})
+    assert result.paragraphs[0].status is ParagraphStatus.OK
+    assert len(result.warnings) == 1
+    assert result.warnings[0].startswith("P1: 6")
+    assert "for 7 words, much longer than the other paragraphs" in result.warnings[0]
+    assert exit_code(result, strict=True) == 1
+    assert exit_code(result, strict=False) == 0
+
+
+def test_normal_narration_gets_no_slow_warning() -> None:
+    words = narration("P1", "P2", "P3", "P4", pause=3.0)
+    result = run_parts(FakeTranscriber(words), parts_plan("all.wav"), {"all.wav": 60.0})
+    assert result.warnings == []
+
+
+def test_paragraph_files_are_never_checked_for_pace() -> None:
+    plan = plan_audio(
+        [Path(f"P{n}.wav") for n in (1, 2, 3, 4)], list(SPOKEN), AudioMode.PER_PARAGRAPH
+    )
+    table = {"P1.wav": 300.0, "P2.wav": 3.0, "P3.wav": 3.0, "P4.wav": 3.0}
+    result = run_alignment(
+        SCRIPT, "demo.md", plan, transcriber=None, read_duration=durations_of(table)
+    )
+    assert result.warnings == []
