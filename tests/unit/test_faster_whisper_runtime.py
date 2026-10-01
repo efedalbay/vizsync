@@ -5,11 +5,14 @@ when audio is decoded, so these tests decode a generated WAV and run the voice-a
 it. No model is downloaded and no recording is used.
 """
 
+import logging
 from pathlib import Path
 
 from fakes import write_silent_wav
 from faster_whisper import decode_audio
 from faster_whisper.vad import VadOptions, get_speech_timestamps
+
+from vizsync.asr import faster_whisper as fw
 
 
 def test_faster_whisper_decodes_a_wav(tmp_path: Path) -> None:
@@ -21,3 +24,9 @@ def test_faster_whisper_decodes_a_wav(tmp_path: Path) -> None:
 def test_voice_activity_filter_finds_no_speech_in_silence(tmp_path: Path) -> None:
     path = write_silent_wav(tmp_path / "a.wav", 2.0)
     assert get_speech_timestamps(decode_audio(str(path)), VadOptions()) == []
+
+
+def test_loading_the_library_quiets_the_hub_rate_limit_notice() -> None:
+    logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
+    fw._library()
+    assert logging.getLogger("huggingface_hub").level == logging.ERROR

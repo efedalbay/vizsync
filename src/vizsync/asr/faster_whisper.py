@@ -4,6 +4,7 @@ The library is imported only when a model is needed, so commands that do not lis
 start fast.
 """
 
+import logging
 from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
@@ -103,6 +104,9 @@ class FasterWhisperTranscriber:
 def _library() -> ModuleType:
     import faster_whisper
 
+    # The model hub warns that anonymous downloads have lower rate limits. The models are public
+    # and one download is far below any limit, so the warning would only confuse.
+    logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
     return faster_whisper
 
 
