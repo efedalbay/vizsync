@@ -8,6 +8,8 @@ from pathlib import Path
 from vizsync.asr.base import Transcriber, Word
 from vizsync.audio.inputs import AudioMode, AudioPlan
 from vizsync.audio.timeline import Part, build_timeline, read_duration, total_duration
+from vizsync.match.normalize import normalize_text
+from vizsync.match.pace import Pace, slow_paragraphs
 from vizsync.match.spans import (
     DEFAULT_MIN_CONFIDENCE,
     ParagraphSpan,
@@ -224,7 +226,12 @@ def _assemble(
         parts=outcome.parts,
         chapters=chapters,
         paragraphs=paragraphs,
-        warnings=outcome.leading_warnings + _paragraph_warnings(paragraphs, outcome.missing_reason),
+        warnings=outcome.leading_warnings
+        + _paragraph_warnings(
+            paragraphs,
+            outcome.missing_reason,
+            _word_counts(script) if outcome.mode is AudioMode.PARTS else {},
+        ),
         transcription_seconds=outcome.transcription_seconds,
         matching_seconds=outcome.matching_seconds,
     )
@@ -241,14 +248,39 @@ def _chapter_result(
     return ChapterResult(title, first, last, found[0].start, found[-1].end)
 
 
-def _paragraph_warnings(paragraphs: Sequence[ParagraphResult], missing_reason: str) -> list[str]:
+def _word_counts(script: Script) -> dict[str, int]:
+    return {p.id: len(normalize_text(p.text)) for p in script.paragraphs}
+
+
+def _paragraph_warnings(
+    paragraphs: Sequence[ParagraphResult], missing_reason: str, word_counts: dict[str, int]
+) -> list[str]:
+    slow = _slow_paragraphs(paragraphs, word_counts)
     warnings: list[str] = []
     for paragraph in paragraphs:
         if paragraph.status is ParagraphStatus.MISSING:
             warnings.append(f"{paragraph.id}: {missing_reason}")
-        elif paragraph.status is ParagraphStatus.LOW_CONFIDENCE:
+            continue
+        if paragraph.status is ParagraphStatus.LOW_CONFIDENCE:
             warnings.append(
                 f"{paragraph.id}: low confidence ({paragraph.confidence:.2f}). "
                 "The narration may differ from the script."
             )
+        if paragraph.id in slow and paragraph.start is not None and paragraph.end is not None:
+            warnings.append(
+                f"{paragraph.id}: {paragraph.end - paragraph.start:.1f} s for "
+                f"{word_counts[paragraph.id]} words, much longer than the other paragraphs. "
+                "The script may be read more than once or out of order."
+            )
     return warnings
+
+
+def _slow_paragraphs(
+    paragraphs: Sequence[ParagraphResult], word_counts: dict[str, int]
+) -> set[str]:
+    paces = [
+        Pace(p.id, word_counts[p.id], p.end - p.start)
+        for p in paragraphs
+        if p.start is not None and p.end is not None and p.id in word_counts
+    ]
+    return set(slow_paragraphs(paces))

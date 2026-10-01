@@ -246,7 +246,7 @@ vizsync never edits a vizreel spec file itself, because rewriting YAML with a st
 
 ## 7. Warnings
 
-Each warning is a short sentence with the identifier. Examples: `P17: low confidence (0.62). The narration may differ from the script.`, `P23: not found in the audio.` (`parts` mode) or `P23: no audio file.` (`per-paragraph` mode), `notes.wav: matches no paragraph of the script, ignored.`, `chapters: only 2 chapters, YouTube needs at least 3.` Warnings are printed and stored in `timing.json`.
+Each warning is a short sentence with the identifier. Examples: `P17: low confidence (0.62). The narration may differ from the script.`, `P23: not found in the audio.` (`parts` mode) or `P23: no audio file.` (`per-paragraph` mode), `notes.wav: matches no paragraph of the script, ignored.`, `P4: 730.8 s for 12 words, much longer than the other paragraphs. The script may be read more than once or out of order.` (`parts` mode: a found paragraph whose seconds per word exceed 3 times the median of all found paragraphs, at least 5 s long, needs 3 or more found paragraphs; its status stays `ok`), `chapters: only 2 chapters, YouTube needs at least 3.` Warnings are printed and stored in `timing.json`.
 
 ## 8. Errors
 
