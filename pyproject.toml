@@ -60,6 +60,10 @@ warn_redundant_casts = true
 disallow_untyped_defs = true
 
 [[tool.mypy.overrides]]
+module = ["faster_whisper", "faster_whisper.*", "ctranslate2"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 module = ["vizsync.script.*", "vizsync.match.*", "vizsync.output.*"]
 disallow_any_generics = true
 disallow_untyped_calls = true
