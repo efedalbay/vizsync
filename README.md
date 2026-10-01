@@ -4,7 +4,7 @@ Find out where each paragraph of your script starts and ends in your narration a
 
 vizsync takes a narration recording and the numbered script it was read from, and returns the start and end time of every paragraph. It is built for video makers who write a script first, record a voice-over, and then need to know exactly when to place charts, cut footage or add chapter markers.
 
-> **Status: planning.** The design is written (see `docs/`), the code is not. Nothing here is installable yet.
+> **Status: in development, not released.** `vizsync check` and `vizsync align` (with `timing.json` and `timing.csv`) work from source. `chapters.txt`, `markers.edl` and the vizreel chart timing are not implemented yet, and the package is not on PyPI yet.
 
 ## Why
 
@@ -17,9 +17,9 @@ Because the script is known, vizsync does not need a perfect transcript. Speech 
 ```
 $ vizsync align narration.wav --script northwind.md -o out/
 
-P1    00:00.4 → 00:09.8    9.4 s   ok
-P2    00:10.6 → 00:21.1   10.5 s   ok
-P3    00:21.9 → 00:38.0   16.1 s   ok
+P1     00:00.4 ->  00:09.8     9.4 s  ok
+P2     00:10.6 ->  00:21.1    10.5 s  ok
+P3     00:21.9 ->  00:38.0    16.1 s  ok
 ```
 
 Written to `out/`:
@@ -28,8 +28,8 @@ Written to `out/`:
 |---|---|
 | `timing.json` | Full result. The source of truth for other tools |
 | `timing.csv` | Open in a spreadsheet |
-| `chapters.txt` | Paste into a YouTube description |
-| `markers.edl` | Import as timeline markers in DaVinci Resolve |
+| `chapters.txt` | Paste into a YouTube description (planned) |
+| `markers.edl` | Import as timeline markers in DaVinci Resolve (planned) |
 
 With a small map file, vizsync also works out how long each chart clip must be, for use with [vizreel](https://github.com/efedalbay/vizreel).
 
@@ -55,13 +55,19 @@ Give vizsync whatever you have:
 
 The output is the same in every case.
 
-## Planned installation
+## Installation
+
+Not on PyPI yet. From a clone of this repository, with [uv](https://docs.astral.sh/uv/):
 
 ```
-pip install vizsync
+uv sync
+uv run vizsync check examples/northwind-script.md
+uv run vizsync align narration.wav --script examples/northwind-script.md --out out
 ```
 
-Python 3.11+. Speech recognition runs locally on your computer with [faster-whisper](https://github.com/SYSTRAN/faster-whisper). No account, no upload, no cost per use.
+Python 3.11+. Speech recognition runs locally on your computer with [faster-whisper](https://github.com/SYSTRAN/faster-whisper). The first run downloads the speech model (about 480 MB for the default `small.en`; use `--model tiny.en` for a quick, less accurate run). No account, no upload, no cost per use.
+
+When it is released: `pip install vizsync`.
 
 ## Documents
 

@@ -40,7 +40,7 @@ Work proceeds one milestone at a time. A milestone is done only when every accep
 - Slow end-to-end test on the fixture clip.
 - Measure and record in the README: time to align a ~13-minute narration on a typical Windows laptop CPU with `small.en`.
 
-**Done when:** the fixture clip aligns with every paragraph `ok`; the same audio split into 3 parts and into per-paragraph files gives the same paragraph order and times within 0.3 s.
+**Done when:** the fixture clip aligns with every paragraph `ok`; the same audio split into 3 parts gives the same paragraph times within 0.3 s, and split into per-paragraph files gives the same paragraph order and the same paragraph lengths within 0.3 s (the silences between files are gone, so absolute times cannot match).
 
 ## M4 — Chapters and editor markers
 

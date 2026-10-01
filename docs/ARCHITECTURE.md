@@ -52,6 +52,7 @@ audio files ──► audio/inputs.py ──► Timeline (parts with offsets)
                                         │
                       match/spans.py ───► ParagraphSpan (start, end, confidence, status)
                                         │
+                      pipeline.py runs the steps above ──► AlignmentResult
                       output/ writers ──► timing.json, timing.csv, chapters.txt, markers.edl
                       integrations/vizreel.py ──► chart start/duration
 ```
@@ -67,12 +68,14 @@ vizsync/
 ├── docs/  (SPEC.md, ARCHITECTURE.md, ROADMAP.md)
 ├── examples/
 ├── scripts/
-│   └── check-local.ps1        ← checks Efe runs on his Windows computer
+│   ├── check-local.ps1        ← pulls, then runs check-steps.ps1 (checks Efe runs on Windows)
+│   └── check-steps.ps1        ← the checks themselves, one step per check
 ├── src/vizsync/
 │   ├── __init__.py            ← version
 │   ├── __main__.py
 │   ├── cli.py                 ← Typer app, no business logic
 │   ├── errors.py              ← VizsyncError hierarchy
+│   ├── pipeline.py            ← script + audio plan → AlignmentResult (no printing, no files)
 │   ├── timefmt.py             ← seconds ↔ text
 │   ├── script/
 │   │   ├── models.py          ← Script, Chapter, Paragraph
@@ -177,8 +180,17 @@ For each paragraph:
 ## Audio inputs (`audio/`)
 
 - `inputs.py` expands folders and wildcards itself (Windows PowerShell does not), natural-sorts folder/wildcard results, detects the mode (see `docs/SPEC.md` §3).
-- `timeline.py` reads each part's duration with PyAV (already installed with faster-whisper) and computes offsets: `offset[n] = sum(duration[:n]) + n × gap`.
+- `timeline.py` reads each part's duration with PyAV (already installed with faster-whisper) and computes offsets: `offset[n] = offset + sum(duration[:n]) + n × gap`.
 - In `per-paragraph` mode there is no speech recognition: spans come straight from file durations, laid end to end in script order.
+
+## The pipeline (`pipeline.py`)
+
+`run_alignment` takes the parsed script, an `AudioPlan` (which files, which mode) and a `Transcriber`, and returns an `AlignmentResult`. The CLI builds the plan and the transcriber, shows progress, prints the result and writes the files; the pipeline itself prints nothing and reads files only through the injected `read_duration`. This is why it is tested end to end with `FakeTranscriber`, without audio.
+
+- Parts mode: one `transcribe` call per file, times shifted by the part's offset, one global alignment, `compute_spans`.
+- Per-paragraph mode: no recognition; each file is one paragraph, confidence `1.0`; a paragraph without a file is `missing`; files without a paragraph are ignored with a warning.
+- Warnings are plain sentences (SPEC §7). Exit code: 2 if any paragraph is missing, else 1 if `--strict` and there are warnings, else 0.
+- `faster_whisper.py` imports the library only when a model is needed, so `check` and `--help` stay fast. A failure to load the model raises `ModelLoadError`; the slow tests skip on that error only.
 
 ## Outputs
 
@@ -192,9 +204,9 @@ Writers take the same in-memory result object and are independent of each other.
 
 ## Testing strategy
 
-- `tests/unit/`: parser, normalization, aligner (with `FakeTranscriber`-style word lists including every hard case above), span refinement, time formatting, each output writer, chart map. No audio, no model. These run everywhere, including the cloud environment.
-- `tests/slow/`: one end-to-end run with the real model on the short fixture clip, marked `@pytest.mark.slow`. Requires downloading a small model, so it runs on Efe's computer, not necessarily in the cloud environment (network access there is restricted).
-- Fixture: a 15–25 second recording of the fictional Northwind text in `examples/`. Efe decides whether it is his own voice or a synthetic voice. Never a recording of anyone else.
+- `tests/unit/`: parser, normalization, aligner (with `FakeTranscriber`-style word lists including every hard case above), span refinement, time formatting, input expansion, the pipeline, each output writer, chart map. No recorded audio and no model. The only audio is a tiny silent WAV that a few tests write themselves to check the duration reader. These run everywhere, including the cloud environment.
+- `tests/slow/`: end-to-end runs with the real model on the fixture clip, marked `@pytest.mark.slow`: the command on the whole clip, the same clip cut into 3 parts (absolute times within 0.3 s), and cut into one file per paragraph (same order, paragraph lengths within 0.3 s; the silences between files are gone, so absolute times cannot match). They skip, with the reason, when the clip or the model is missing. Requires downloading a model, so they run on Efe's computer, not in the cloud environment (network access there is restricted). `VIZSYNC_TEST_MODEL` picks the model (default `base.en`).
+- Fixture: `tests/fixtures/northwind.wav`, a 20–35 second PCM WAV of the English lines of `examples/northwind-script.md` with pauses of at least 0.8 s between paragraphs. Efe decides whether it is his own voice or a synthetic voice he generated himself. Never a recording of anyone else.
 - The aligner has a benchmark test: 4,500 script words against 4,500 recognized words with 5% random errors finishes under 10 seconds.
 - Tests must pass on Windows.
 
