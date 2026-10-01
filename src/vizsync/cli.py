@@ -17,17 +17,14 @@ from vizsync import __version__
 from vizsync.asr.faster_whisper import FasterWhisperTranscriber, download_size_mb
 from vizsync.audio.inputs import AudioMode, expand_inputs, plan_audio
 from vizsync.audio.timeline import read_duration
-from vizsync.errors import OutputError, ScriptParseError, VizsyncError
+from vizsync.errors import ScriptParseError, VizsyncError
 from vizsync.match.spans import DEFAULT_MIN_CONFIDENCE, ParagraphStatus
-from vizsync.output.table import write_timing_csv
-from vizsync.output.timing import build_timing, write_timing_json
+from vizsync.output.edl import DEFAULT_FPS, DEFAULT_TIMELINE_START, EdlSettings
+from vizsync.output.files import FORMATS, prepare_outputs, write_outputs
 from vizsync.pipeline import AlignmentResult, ParagraphResult, exit_code, run_alignment
 from vizsync.script.models import TextMode
 from vizsync.script.parser import load_script
 from vizsync.timefmt import format_time
-
-FORMATS = ("json", "csv", "chapters", "edl")
-LATER_FORMATS = ("chapters", "edl")
 
 app = typer.Typer(
     name="vizsync",
@@ -201,10 +198,28 @@ def align(
             help="Comma-separated files to write: json, csv, chapters, edl.",
         ),
     ] = ",".join(FORMATS),
+    fps: Annotated[
+        float,
+        typer.Option(
+            "--fps",
+            help="Frame rate of the video, for markers.edl: 23.976, 24, 25, 29.97, 30, 50, "
+            "59.94 or 60.",
+        ),
+    ] = DEFAULT_FPS,
+    timeline_start: Annotated[
+        str,
+        typer.Option(
+            "--timeline-start",
+            help="Timecode where the editor's timeline starts, for markers.edl "
+            "(DaVinci Resolve uses 01:00:00:00).",
+        ),
+    ] = DEFAULT_TIMELINE_START,
     debug: Annotated[bool, typer.Option("--debug", help="Show tracebacks for errors.")] = False,
 ) -> None:
     """Find where each paragraph of the script is in the audio and write the result files."""
     with _handle_errors(debug):
+        chosen = _split_formats(formats)
+        edl = EdlSettings.parse(fps, timeline_start) if "edl" in chosen else None
         parsed = load_script(script, text)
         plan = plan_audio(expand_inputs(audio), [p.id for p in parsed.paragraphs], mode)
         transcriber = None
@@ -225,10 +240,11 @@ def align(
                 read_duration=read_duration,
                 on_progress=lambda message: status.update(escape(message)),
             )
-        _report(result)
-        written = _write_files(result, out, _split_formats(formats))
+        outputs = prepare_outputs(result, chosen, edl)
+        _report(outputs.result)
+        written = write_outputs(outputs, out, tool=f"vizsync {__version__}")
     _print("Written: " + ", ".join(str(path) for path in written), "green")
-    code = exit_code(result, strict=strict)
+    code = exit_code(outputs.result, strict=strict)
     if code:
         raise typer.Exit(code)
 
@@ -240,24 +256,6 @@ def _download_notice(model: str) -> str:
         f"Downloading the speech model '{model}'{about}. "
         "This happens once; later runs use the saved copy."
     )
-
-
-def _write_files(result: AlignmentResult, out: Path, formats: list[str]) -> list[Path]:
-    try:
-        out.mkdir(parents=True, exist_ok=True)
-    except OSError as error:
-        raise OutputError(f"Cannot create the output folder ({error.strerror})", path=out) from None
-    timing = build_timing(result, tool=f"vizsync {__version__}")
-    written: list[Path] = []
-    if "json" in formats:
-        write_timing_json(timing, out / "timing.json")
-        written.append(out / "timing.json")
-    if "csv" in formats:
-        write_timing_csv(timing, out / "timing.csv")
-        written.append(out / "timing.csv")
-    if any(name in LATER_FORMATS for name in formats):
-        _print("chapters.txt and markers.edl are not available yet; skipped.", "yellow", error=True)
-    return written
 
 
 def _report(result: AlignmentResult) -> None:

@@ -84,6 +84,9 @@ else {
     Invoke-Step "align: fixture clip" {
         uv run vizsync align tests/fixtures/northwind.wav --script examples/northwind-script.md --out out/fixture
     }
+    # M4: the chapter list and the marker file written by the step above.
+    Invoke-Step "chapters.txt of the fixture clip" { Get-Content out/fixture/chapters.txt }
+    Invoke-Step "markers.edl of the fixture clip" { Get-Content out/fixture/markers.edl }
 }
 
 # M3: recognition speed on about 13 minutes of audio, for the README. Only with -Speed.
