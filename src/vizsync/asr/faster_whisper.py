@@ -7,7 +7,7 @@ start fast.
 import ctypes
 import logging
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -64,10 +64,14 @@ class FasterWhisperTranscriber:
         *,
         device: str = "auto",
         model_factory: ModelFactory | None = None,
+        vad_filter: bool = True,
+        vad_parameters: Mapping[str, Any] | None = None,
     ) -> None:
         self.model_name = model
         self._device = device
         self._model_factory = model_factory or _load_model
+        self._vad_filter = vad_filter
+        self._vad_parameters = dict(vad_parameters) if vad_parameters is not None else None
         self._model: Any = None
 
     def is_cached(self) -> bool:
@@ -84,7 +88,11 @@ class FasterWhisperTranscriber:
         model = self._loaded_model()
         try:
             segments, _info = model.transcribe(
-                str(audio), language=language, word_timestamps=True, vad_filter=True
+                str(audio),
+                language=language,
+                word_timestamps=True,
+                vad_filter=self._vad_filter,
+                vad_parameters=self._vad_parameters,
             )
             return [
                 Word(text=word.word.strip(), start=float(word.start), end=float(word.end))
