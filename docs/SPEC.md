@@ -88,7 +88,7 @@ Aligns the script to the audio and writes the output files.
 | `--mode` | `auto` | `auto`, `parts` or `per-paragraph` (see §3) |
 | `--model` | `small.en` | Speech model: `tiny.en`, `base.en`, `small.en`, `medium.en`, or another faster-whisper model name or path |
 | `--language` | `en` | Language code of the spoken audio |
-| `--device` | `auto` | `auto`, `cpu` or `cuda` |
+| `--device` | `auto` | `auto`, `cpu` or `cuda`. `auto` uses the NVIDIA GPU only when it is there and the NVIDIA libraries cuBLAS 12 and cuDNN 9 can be loaded, otherwise the CPU. `cuda` without those libraries is an error |
 | `--offset` | `0` | Seconds added to every time (for example a 5 s intro before the narration) |
 | `--gap` | `0` | Seconds of silence assumed between consecutive audio parts (`parts` mode) |
 | `--min-confidence` | `0.8` | Below this a paragraph is reported as `low_confidence` |
