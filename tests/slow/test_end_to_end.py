@@ -44,7 +44,7 @@ def script() -> Script:
 @pytest.fixture(scope="module")
 def clip() -> Path:
     if not CLIP.exists():
-        pytest.skip(f"the fixture clip {CLIP} does not exist (see the README to record it)")
+        pytest.skip(f"the fixture clip {CLIP} does not exist (see tests/fixtures/README.md)")
     return CLIP
 
 
