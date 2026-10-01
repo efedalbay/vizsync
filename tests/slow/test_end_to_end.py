@@ -85,6 +85,19 @@ def check_pauses(result: AlignmentResult) -> None:
         )
 
 
+def assert_within_tolerance(columns: str, rows: list[tuple[str, tuple[float, ...]]]) -> None:
+    """Fail with the differences of every paragraph, not only the first one over the limit."""
+    lines = []
+    for paragraph_id, differences in rows:
+        shown = " ".join(f"{difference:+.2f}" for difference in differences)
+        over = any(abs(difference) > TOLERANCE for difference in differences)
+        lines.append(f"  {paragraph_id:<4} {shown}{'   <-- over' if over else ''}")
+    table = "\n".join(lines)
+    assert all("<-- over" not in line for line in lines), (
+        f"differences above {TOLERANCE} s ({columns}, in seconds):\n{table}"
+    )
+
+
 def test_the_command_aligns_the_clip(clip: Path, tmp_path: Path) -> None:
     arguments = ["align", str(clip), "--script", str(SCRIPT), "--out", str(tmp_path)]
     result = CliRunner().invoke(app, [*arguments, "--model", MODEL])
@@ -132,11 +145,12 @@ def test_three_parts_give_the_same_times(
     assert split.mode is AudioMode.PARTS and len(split.parts) == 3
     assert [p.id for p in split.paragraphs] == [p.id for p in whole.paragraphs]
     assert all(p.status is ParagraphStatus.OK for p in split.paragraphs), describe(split.paragraphs)
+    rows = []
     for one, other in zip(whole.paragraphs, split.paragraphs, strict=True):
         assert one.start is not None and one.end is not None
         assert other.start is not None and other.end is not None
-        assert abs(one.start - other.start) <= TOLERANCE, one.id
-        assert abs(one.end - other.end) <= TOLERANCE, one.id
+        rows.append((one.id, (other.start - one.start, other.end - one.end)))
+    assert_within_tolerance("start, end: 3 parts minus the whole clip", rows)
 
 
 def test_one_file_per_paragraph_gives_the_same_order_and_lengths(
@@ -157,7 +171,10 @@ def test_one_file_per_paragraph_gives_the_same_order_and_lengths(
     assert all(p.status is ParagraphStatus.OK for p in separate.paragraphs)
     starts = [p.start for p in separate.paragraphs if p.start is not None]
     assert starts == sorted(starts) and len(starts) == len(whole.paragraphs)
+    rows = []
     for one, other in zip(whole.paragraphs, separate.paragraphs, strict=True):
         assert one.start is not None and one.end is not None
         assert other.start is not None and other.end is not None
-        assert abs((one.end - one.start) - (other.end - other.start)) <= TOLERANCE, one.id
+        length_difference = (other.end - other.start) - (one.end - one.start)
+        rows.append((one.id, (length_difference,)))
+    assert_within_tolerance("length: separate files minus the whole clip", rows)
