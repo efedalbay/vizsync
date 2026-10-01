@@ -1,7 +1,7 @@
 # Test fixture: the Northwind clip
 
 `northwind.wav` is the recording the slow tests (`uv run pytest -m slow -rs`) and
-`scripts/check-steps.ps1` use. It is not in the repository until Efe adds it.
+`scripts/check-steps.ps1` use. It is in the repository (38 s, 16 kHz mono).
 
 ## What it must be
 
@@ -9,7 +9,7 @@
 - **Your own voice, or a synthetic voice you generated yourself.** Never a recording of anyone
   else, and nothing you do not have the right to publish: the repository is MIT-licensed and
   this file is committed to it.
-- A plain PCM WAV (16-bit). 20 to 35 seconds. Mono is fine; 16 kHz is enough.
+- A plain PCM WAV (16-bit). About 40 seconds. Mono is fine; 16 kHz is enough.
 - **A pause of at least one second between paragraphs**, and no pause inside a paragraph longer
   than half a second. The split tests cut the clip in those pauses.
 - Read the numbers the natural way ("seven hundred forty million", "twenty sixteen").
