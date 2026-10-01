@@ -119,11 +119,11 @@ def test_voice_activity_filter_can_be_switched_off() -> None:
     assert model.calls[0][1]["vad_filter"] is False
 
 
-def test_voice_activity_parameters_default_to_the_librarys_own() -> None:
+def test_voice_activity_parameters_default_to_a_short_padding() -> None:
     model = FakeModel([])
     transcriber, _ = make_transcriber(model)
     transcriber.transcribe(Path("a.wav"), language="en")
-    assert model.calls[0][1]["vad_parameters"] is None
+    assert model.calls[0][1]["vad_parameters"] == {"speech_pad_ms": 100}
 
 
 def test_model_is_loaded_once_and_only_when_needed() -> None:

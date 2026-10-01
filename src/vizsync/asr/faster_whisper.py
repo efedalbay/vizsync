@@ -26,6 +26,11 @@ _CUDA_LIBRARIES = {
 }
 """The NVIDIA libraries (cuBLAS 12, cuDNN 9) the GPU needs, which come with the CUDA toolkit."""
 
+DEFAULT_VAD_PARAMETERS: Mapping[str, Any] = {"speech_pad_ms": 100}
+"""Voice-activity options used when none are given. The library pads every stretch of speech by
+400 ms, which moved paragraph starts by up to 0.6 s on the fixture clip; 100 ms gave the same
+times whether the clip was recognized whole or in parts."""
+
 ModelFactory = Callable[[str, str, str], Any]
 """``(model name or folder, device, compute type)`` to a loaded model."""
 
@@ -71,7 +76,9 @@ class FasterWhisperTranscriber:
         self._device = device
         self._model_factory = model_factory or _load_model
         self._vad_filter = vad_filter
-        self._vad_parameters = dict(vad_parameters) if vad_parameters is not None else None
+        self._vad_parameters = dict(
+            DEFAULT_VAD_PARAMETERS if vad_parameters is None else vad_parameters
+        )
         self._model: Any = None
 
     def is_cached(self) -> bool:

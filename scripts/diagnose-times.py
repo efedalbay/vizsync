@@ -26,9 +26,9 @@ from vizsync.script.parser import load_script
 ROOT = Path(__file__).resolve().parents[1]
 FRAME_SECONDS = 0.01
 SETTINGS: list[tuple[str, bool, dict[str, int] | None]] = [
-    ("default (pad 400 ms, silence 2000 ms)", True, None),
+    ("library default (pad 400, silence 2000)", True, {"speech_pad_ms": 400}),
     ("pad 200, silence 2000", True, {"speech_pad_ms": 200}),
-    ("pad 100, silence 2000", True, {"speech_pad_ms": 100}),
+    ("pad 100, silence 2000 (vizsync default)", True, {"speech_pad_ms": 100}),
     ("pad 100, silence 500", True, {"speech_pad_ms": 100, "min_silence_duration_ms": 500}),
     ("pad 50, silence 300", True, {"speech_pad_ms": 50, "min_silence_duration_ms": 300}),
     ("pad 0, silence 300", True, {"speech_pad_ms": 0, "min_silence_duration_ms": 300}),
