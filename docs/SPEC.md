@@ -103,7 +103,7 @@ What it prints: one line per paragraph (`P3    00:21.9 -> 00:38.0    16.1 s  ok`
 
 ### `vizsync durations TIMING_JSON --map CHART_MAP [--pad SECONDS] [-o FILE]`
 
-Computes chart clip timing for vizreel (see §6). Writes YAML to `-o` or prints it.
+Computes chart clip timing for vizreel (see §6). Writes YAML to `-o` or prints it. `--pad` (default `0`, not negative) adds seconds to the end of a clip.
 
 ## 3. Audio input modes
 
@@ -212,7 +212,7 @@ Resolve places a marker by the record timecode of its event, so the timeline's s
 
 ## 6. Chart timing for vizreel
 
-`vizsync durations` reads `timing.json` and a chart map, and reports when each chart clip goes on the timeline and how long it must be. It is written against vizreel 0.11 (`docs/SPEC.md` there is the source of truth for `duration`, `step_duration` and sequences). vizreel still takes chart timing from the YAML spec; CSV files in vizreel only carry a chart's data (bars, series, events), not its timing.
+`vizsync durations` reads `timing.json` and a chart map, and reports when each chart clip goes on the timeline and how long it must be. It is written against vizreel 0.16 (`docs/SPEC.md` there is the source of truth for `duration`, `step_duration`, `fps` and sequences). vizreel still takes chart timing from the YAML spec; CSV files in vizreel only carry a chart's data (bars, series, events), not its timing. vizreel rounds a clip to whole frames (`round(duration × fps)`), so vizsync gives times to the millisecond and leaves the rounding to vizreel.
 
 ### Chart map
 
@@ -223,17 +223,21 @@ charts:
     paragraphs: [P2]
   valuation:                 # one clip covering two paragraphs
     paragraphs: [P3, P4]
-  history:                   # a vizreel sequence: one clip per paragraph, in order
+  collapse:                  # a vizreel sequence: one clip per paragraph, in order
     sequence: true
     paragraphs: [P6, P7, P8]
 ```
 
-- The key is the vizreel chart `id`.
-- `paragraphs` lists one or more paragraph identifiers. They must be consecutive in the script.
-- With `sequence: true`, each paragraph is one clip of the sequence, in the order listed (vizreel allows 2–8 clips).
-- Unknown identifiers or `missing` paragraphs are errors.
+- `version` is required and must be `1`. `charts` must hold at least one chart.
+- The key is the vizreel chart `id`: lowercase letters, digits and `-` only, and not a name Windows reserves (`con`, `prn`, `aux`, `nul`, `com1`–`com9`, `lpt1`–`lpt9`), as vizreel requires.
+- `paragraphs` is required and lists one or more paragraph identifiers, each once. In `timing.json` they must exist, must not be `missing`, and must be consecutive and in script order.
+- `sequence` is optional (`false` by default). With `sequence: true`, each paragraph is one clip of the sequence, in the order listed; vizreel allows 2 to 8 clips.
+- Other fields are errors.
+- All problems are reported together, each as `FILE: charts.ID: message`, and the command exits with code `1` without writing anything.
 
 ### Result
+
+For the files `examples/chart-map.yaml` and `examples/timing.example.json`:
 
 ```yaml
 charts:
@@ -243,23 +247,31 @@ charts:
   valuation:
     start: 21.9
     duration: 27.6
-  history:
+  collapse:
     start: 62.0
-    duration: 14.1          # first clip: goes into `duration`
-    step_duration: 12.6     # longest later clip: goes into `step_duration`
+    duration: 14.1
+    step_duration: 13.4
     clips:
       - { n: 1, start: 62.0, duration: 14.1 }
       - { n: 2, start: 76.1, duration: 13.4 }
-      - { n: 3, start: 89.5, duration: 12.6 }
+      - { n: 3, start: 89.5, duration: 11.5 }
 ```
+
+Charts are in the order of the chart map. Numbers have at least one decimal and at most three (milliseconds).
 
 Single clip: `start` = start of the first paragraph (where to place the clip in the editor). `duration` = end of the last paragraph minus that start, plus `--pad` (default `0`).
 
-Sequence: clips are cut back to back, so clip *k* runs from the start of paragraph *k* to the start of paragraph *k+1* (no gap on the timeline); the last clip runs to the end of its paragraph plus `--pad`. `duration` is the first clip's length. vizreel has one `step_duration` for all later clips, so vizsync reports the longest later clip: a clip can be trimmed in the editor (it holds its last frame) but not made longer than it was rendered. The exact per-clip times are in `clips`.
+Sequence: clips are cut back to back, so clip *k* runs from the start of paragraph *k* to the start of paragraph *k+1* (no gap on the timeline); the last clip runs to the end of its paragraph plus `--pad`. `start` and `duration` are the first clip's. vizreel has one `step_duration` for all later clips, so vizsync reports the longest later clip: a clip can be trimmed in the editor (it holds its last frame) but not made longer than it was rendered. The exact per-clip times are in `clips`.
 
-Warnings: a clip shorter than 2 seconds (vizreel's minimum `duration`); for sequences, a later clip much shorter than the reported `step_duration`.
+The YAML goes to standard output, or to the file given with `-o` (then `Written: FILE` is printed). Warnings go to standard error. Values are in seconds and go into the vizreel spec's `duration:` / `step_duration:` fields.
 
-Values are in seconds and go into the vizreel spec's `duration:` / `step_duration:` fields.
+Warnings (they do not change the exit code):
+
+- A clip, or a clip of a sequence, shorter than 2 seconds (vizreel's minimum `duration`): `collapse: clip 2 is only 1.4 s long, vizreel needs at least 2 s.`
+- A later clip of a sequence shorter than half of the reported `step_duration`: `collapse: clip 3 (4.0 s) is much shorter than step_duration (14.0 s); trim it in the editor.`
+- A paragraph with status `low_confidence`: `collapse: P7 has low confidence (0.62), its time may be off.`
+
+Exit codes: `0` success, `1` an unreadable or invalid `timing.json` or chart map, or an unwritable output file.
 
 vizsync never edits a vizreel spec file itself, because rewriting YAML with a standard library drops the comments that scripts rely on for fact references.
 

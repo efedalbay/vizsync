@@ -64,6 +64,10 @@ class ModelLoadError(TranscriptionError):
     """The speech model could not be loaded, for example because it could not be downloaded."""
 
 
+class TimingFileError(VizsyncError):
+    """``timing.json`` is missing, unreadable or not a vizsync result."""
+
+
 class ChartMapError(VizsyncError):
     """The chart map is invalid or refers to paragraphs that cannot be used."""
 
