@@ -17,6 +17,8 @@ dependencies = [
     "rich",
     "rapidfuzz>=3",
     "faster-whisper>=1",
+    # faster-whisper 1.2 opens audio with an argument that PyAV 19 removed.
+    "av>=12,<19",
 ]
 
 [project.scripts]

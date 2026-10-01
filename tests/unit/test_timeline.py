@@ -1,8 +1,8 @@
-import wave
 from pathlib import Path
 
 import av
 import pytest
+from fakes import write_silent_wav
 
 from vizsync.audio.timeline import (
     Part,
@@ -12,16 +12,6 @@ from vizsync.audio.timeline import (
     total_duration,
 )
 from vizsync.errors import AudioError
-
-
-def write_silent_wav(path: Path, seconds: float, rate: int = 16000) -> Path:
-    with wave.open(str(path), "wb") as wav:
-        wav.setnchannels(1)
-        wav.setsampwidth(2)
-        wav.setframerate(rate)
-        wav.writeframes(b"\x00\x00" * round(seconds * rate))
-    return path
-
 
 # --- Timeline arithmetic ---------------------------------------------------------------
 
