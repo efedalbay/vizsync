@@ -1,5 +1,6 @@
 """Test helpers: a transcriber that returns hand-written words, and a word builder."""
 
+import wave
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
@@ -37,3 +38,13 @@ def timed_words(
         words.append(Word(text=token, start=round(time, 6), end=round(time + word_duration, 6)))
         time += word_duration + gap
     return words
+
+
+def write_silent_wav(path: Path, seconds: float, rate: int = 16000) -> Path:
+    """Write a mono 16-bit WAV of silence. Not a recording: it only needs to be decodable."""
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(1)
+        wav.setsampwidth(2)
+        wav.setframerate(rate)
+        wav.writeframes(b"\x00\x00" * round(seconds * rate))
+    return path
