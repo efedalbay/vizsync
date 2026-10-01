@@ -126,6 +126,13 @@ Output: for every script word, either the index of the recognized word it matche
 
 Both sides go through the same function: Unicode NFKC, casefold, remove punctuation (keep apostrophes inside words, split on hyphens), split on whitespace. Digits are kept as written.
 
+Details:
+
+- An apostrophe (plain or typographic) is kept only between two letters or digits ("don't", "Northwind's"); elsewhere it is dropped.
+- Dashes of every kind and `/` separate words ("twenty-five" gives "twenty", "five").
+- A `.` between two digits is a decimal point and is kept ("3.5"). Every other punctuation mark or symbol is removed without separating: "25,000" becomes "25000", "U.S." becomes "us".
+- On the recognizer side a word that normalizes to nothing is dropped, and a word that normalizes to several words is split with its time interval shared evenly.
+
 ### Alignment
 
 A global sequence alignment (Needleman–Wunsch style dynamic programming) between the two word lists:
@@ -133,14 +140,23 @@ A global sequence alignment (Needleman–Wunsch style dynamic programming) betwe
 - Match score comes from similarity: identical words score highest; near matches (rapidfuzz ratio above a threshold, for example "Zoom" vs "Zume") score positively but lower; dissimilar words are a mismatch with a penalty.
 - Skipping a recognized word (recognizer heard extra words) and skipping a script word (narrator skipped it, or recognizer missed it) both cost a gap penalty.
 - Global, not local: both sequences are in the same order and cover the same recording, so the whole script maps onto the whole transcript.
-- Target size: a 30-minute narration (about 4,500 words) must align in under 10 seconds, excluding speech recognition. A full n×m table is too slow in plain Python at that size, so the implementation must restrict the search to a band around the expected diagonal (band width adapts to the length difference) or use `numpy`. The choice is left to whoever implements it, with a benchmark in the tests.
+- Target size: a 30-minute narration (about 4,500 words) must align in under 10 seconds, excluding speech recognition. A full n×m table is too slow in plain Python at that size.
+
+Implemented in `match/aligner.py` (pure Python plus `rapidfuzz`, no `numpy`):
+
+- Gaps are affine: a run of skipped words pays an opening cost once plus a cost per word, so one long gap (an unspoken paragraph, a hallucination) beats several scattered ones.
+- Only a band around the diagonal is computed. It starts `|n − m| + 50` words wide on each side. The best score inside the band is compared with an upper bound on the score of any path that leaves it; if the bound is higher the band is widened and the alignment repeated. The result therefore always has the optimal score of the full table.
+- Among equally good alignments, matches are preferred from the end backwards, so when the narrator repeats a sentence the last take is matched.
+- Scores (named constants at the top of the module): identical words +2; a near match scores its similarity (rapidfuzz ratio, 0 to 1) when the ratio is at least 0.4; a mismatch −1; a gap costs −1 per skipped word plus −1 per run.
+- Measured: 4,500 words with 5% random errors align in about 0.7 s on the development machine.
+- The constants were tuned only on synthetic data. The 0.4 similarity threshold is low because "zume"/"zoomy" is 0.44, so short function words ("is"/"in") can near-match each other. They must be re-checked against real recognizer output in M3.
 
 ### From alignment to paragraph boundaries (`match/spans.py`)
 
 For each paragraph:
 
 - `start` = start time of its first matched word. `end` = end time of its last matched word.
-- If the paragraph's first (or last) script words are unmatched, the boundary would be biased inward. Refinement: move `start` earlier by the number of unmatched leading words times the paragraph's median word duration, but never earlier than the previous paragraph's `end`. Same for `end`, never later than the next paragraph's `start`.
+- If the paragraph's first (or last) script words are unmatched, the boundary would be biased inward. Refinement: move `start` earlier by the number of unmatched leading words times the paragraph's median matched-word duration, but only over recognized words that nothing matched (time where the recognizer heard something the script could not account for). It never moves into silence and never past the matched words of the nearest found neighbour. Same for `end`, moving later. Missing paragraphs are not neighbours; the first and last found paragraphs are bounded by the first and last recognized words. When two neighbours both want the same unmatched words, the room between them is shared in proportion to how far each wanted to move.
 - `confidence` = matched script words in the paragraph, weighted by match similarity, divided by total script words in the paragraph.
 - `status`: `missing` if fewer than 30% of words matched (or none); `low_confidence` if below `--min-confidence`; otherwise `ok`.
 - A `missing` paragraph is never given invented times.
