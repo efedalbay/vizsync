@@ -62,3 +62,7 @@ class TranscriptionError(VizsyncError):
 
 class ChartMapError(VizsyncError):
     """The chart map is invalid or refers to paragraphs that cannot be used."""
+
+
+class OutputError(VizsyncError):
+    """An output file could not be written."""

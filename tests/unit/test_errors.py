@@ -5,6 +5,7 @@ import pytest
 from vizsync.errors import (
     AudioError,
     ChartMapError,
+    OutputError,
     ScriptError,
     ScriptParseError,
     ScriptProblem,
@@ -13,7 +14,9 @@ from vizsync.errors import (
 )
 
 
-@pytest.mark.parametrize("cls", [ScriptError, AudioError, TranscriptionError, ChartMapError])
+@pytest.mark.parametrize(
+    "cls", [ScriptError, AudioError, TranscriptionError, ChartMapError, OutputError]
+)
 def test_subclasses_are_vizsync_errors(cls: type[VizsyncError]) -> None:
     assert issubclass(cls, VizsyncError)
 
