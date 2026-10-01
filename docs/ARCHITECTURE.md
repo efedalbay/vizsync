@@ -69,7 +69,10 @@ vizsync/
 ├── examples/
 ├── scripts/
 │   ├── check-local.ps1        ← pulls, then runs check-steps.ps1 (checks Efe runs on Windows)
-│   └── check-steps.ps1        ← the checks themselves, one step per check
+│   ├── check-steps.ps1        ← the checks themselves, one step per check (-Speed times 13 minutes)
+│   ├── make-long-clip.py      ← repeats a clip to about 13 minutes for the speed measurement
+│   ├── diagnose-times.py      ← compares paragraph times with the sound for several VAD settings
+│   └── to-wav.py              ← converts a recording to 16 kHz mono WAV
 ├── src/vizsync/
 │   ├── __init__.py            ← version
 │   ├── __main__.py

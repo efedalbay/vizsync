@@ -12,10 +12,14 @@
 
 .PARAMETER NoModel
     Skip the steps that need the real speech model. CI uses this.
+
+.PARAMETER Speed
+    Also measure recognition speed on a clip of about 13 minutes (takes a few minutes).
 #>
 param(
     [switch]$SkipPull,
-    [switch]$NoModel
+    [switch]$NoModel,
+    [switch]$Speed
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,5 +36,5 @@ if (-not $SkipPull) {
     Write-Host "OK: git pull" -ForegroundColor Green
 }
 
-& "$PSScriptRoot\check-steps.ps1" -NoModel:$NoModel
+& "$PSScriptRoot\check-steps.ps1" -NoModel:$NoModel -Speed:$Speed
 exit $LASTEXITCODE
