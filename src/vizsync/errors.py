@@ -57,8 +57,16 @@ class AudioError(VizsyncError):
 
 
 class TranscriptionError(VizsyncError):
-    """Speech recognition failed, for example the model could not be loaded."""
+    """Speech recognition failed."""
+
+
+class ModelLoadError(TranscriptionError):
+    """The speech model could not be loaded, for example because it could not be downloaded."""
 
 
 class ChartMapError(VizsyncError):
     """The chart map is invalid or refers to paragraphs that cannot be used."""
+
+
+class OutputError(VizsyncError):
+    """An output file could not be written."""

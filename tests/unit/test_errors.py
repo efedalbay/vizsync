@@ -5,6 +5,8 @@ import pytest
 from vizsync.errors import (
     AudioError,
     ChartMapError,
+    ModelLoadError,
+    OutputError,
     ScriptError,
     ScriptParseError,
     ScriptProblem,
@@ -13,7 +15,9 @@ from vizsync.errors import (
 )
 
 
-@pytest.mark.parametrize("cls", [ScriptError, AudioError, TranscriptionError, ChartMapError])
+@pytest.mark.parametrize(
+    "cls", [ScriptError, AudioError, TranscriptionError, ChartMapError, OutputError]
+)
 def test_subclasses_are_vizsync_errors(cls: type[VizsyncError]) -> None:
     assert issubclass(cls, VizsyncError)
 
@@ -56,3 +60,7 @@ def test_parse_error_is_a_script_error() -> None:
 
 def test_parse_error_without_path() -> None:
     assert str(ScriptParseError([ScriptProblem(3, "bad")])) == "Line 3: bad"
+
+
+def test_model_load_error_is_a_transcription_error() -> None:
+    assert issubclass(ModelLoadError, TranscriptionError)

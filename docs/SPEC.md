@@ -93,9 +93,11 @@ Aligns the script to the audio and writes the output files.
 | `--gap` | `0` | Seconds of silence assumed between consecutive audio parts (`parts` mode) |
 | `--min-confidence` | `0.8` | Below this a paragraph is reported as `low_confidence` |
 | `--strict` | off | Exit code 1 if any warning was produced |
-| `--formats` | `json,csv,chapters,edl` | Comma-separated list of files to write |
+| `--formats` | `json,csv,chapters,edl` | Comma-separated list of files to write. `chapters` and `edl` are not implemented yet: asking for them prints a notice and skips them |
 
-Exit codes: `0` success (warnings allowed unless `--strict`), `1` user error (bad script, missing file, invalid option), `2` alignment finished but at least one paragraph is `missing`.
+Exit codes: `0` success (warnings allowed unless `--strict`), `1` user error (bad script, missing file, invalid option or value, unwritable output folder), `2` alignment finished but at least one paragraph is `missing`. If a paragraph is `missing`, the exit code is `2` even with `--strict`.
+
+What it prints: one line per paragraph (`P3    00:21.9 -> 00:38.0    16.1 s  ok`; a low-confidence line also shows the confidence, a missing one reads `(not found)`), then the count of `ok`, low-confidence and missing paragraphs. Warnings, progress, and in `parts` mode the audio length and the time spent on speech recognition and on matching go to standard error. The first use of a speech model prints a notice that the model is being downloaded. The output folder is created if needed. A wrong option or value is a user error with exit code `1`.
 
 ### `vizsync durations TIMING_JSON --map CHART_MAP [--pad SECONDS] [-o FILE]`
 
@@ -109,13 +111,15 @@ Computes chart clip timing for vizreel (see §6). Writes YAML to `-o` or prints 
 | `per-paragraph` | One file per paragraph, name contains the identifier (`P08.wav`, `p8_take2.mp3`) | No speech recognition. Each file is one paragraph; paragraphs are laid end to end in script order |
 | `auto` | Anything | If every file name contains a paragraph identifier that exists in the script, `per-paragraph`; otherwise `parts` |
 
+The identifier in a file name is `P` (any case) followed by digits, with no letter or digit directly before the `P` and no digit directly after the number: `P08.wav`, `p8_take2.mp3` and `narration_P3_final.wav` name P8, P8 and P3; `part1.wav` and `xP3.wav` name none. If a name holds several, the first counts.
+
 A single file is `parts` with one part.
 
-Order in `parts` mode: files are sorted by natural order (`part2` before `part10`) when given as a folder or wildcard. Files listed explicitly keep the order given.
+Order in `parts` mode: files are sorted by natural order (`part2` before `part10`) when given as a folder or wildcard. Files listed explicitly keep the order given. A folder is read without its subfolders. Folders and wildcards pick up only files with a known audio extension (`.wav`, `.mp3`, `.m4a`, `.flac`, `.ogg`, `.oga`, `.opus`, `.aac`, `.wma`, `.webm`, `.mp4`); a file named in full is accepted with any extension. A named file that does not exist, and a folder or wildcard that finds no audio file, are errors.
 
 Supported audio formats: whatever PyAV can decode (wav, mp3, m4a, flac, ogg, and others).
 
-In `per-paragraph` mode a script paragraph without a file is `missing`. A file with no matching paragraph is a warning.
+In `per-paragraph` mode a script paragraph without a file is `missing`. A file with no matching paragraph is ignored, with a warning. Two files for one paragraph are an error. If no file matches any paragraph, that is an error too.
 
 ## 4. Time model
 
@@ -161,11 +165,19 @@ All written to the output folder. File names are fixed.
 
 `status` is one of `ok`, `low_confidence`, `missing`. A `missing` paragraph has `start`, `end` and `duration` set to `null`.
 
+Details:
+
+- `mode` is `parts` or `per-paragraph` (the mode actually used, never `auto`).
+- `audio` lists the files by file name only. In `parts` mode they are in playback order; in `per-paragraph` mode, in script order. `offset` is where the file starts on the timeline, so it includes `--offset`. `total_duration` is the length of the audio (durations plus gaps) and does not include `--offset`.
+- `paragraphs` are in script order and `chapters` in script order. A chapter's `first` and `last` are the identifiers of its first and last paragraph in the script, whether or not they are missing.
+- All times, `duration` and `confidence` are rounded to three decimals. In `per-paragraph` mode `confidence` is `1.0` for a paragraph with a file and `0.0` for one without.
+- The file is UTF-8 (no byte order mark), indented by two spaces, and ends with a newline.
+
 A chapter's `start` is the `start` of its first paragraph that is not `missing`; its `end` is the `end` of its last such paragraph.
 
 ### `timing.csv`
 
-Header: `id,chapter,start,end,duration,confidence,status`. Times in seconds. UTF-8 with BOM (so Excel on Windows opens it correctly). Empty cells for `null`.
+Header: `id,chapter,start,end,duration,confidence,status`. One row per paragraph, in script order, with the same values as in `timing.json`. Times in seconds. UTF-8 with BOM (so Excel on Windows opens it correctly). Empty cells for `null`. Cells with commas or quotes are quoted.
 
 ### `chapters.txt`
 
@@ -234,7 +246,7 @@ vizsync never edits a vizreel spec file itself, because rewriting YAML with a st
 
 ## 7. Warnings
 
-Each warning is a short sentence with the identifier. Examples: `P17: low confidence (0.62). The narration may differ from the script.`, `P23: not found in the audio.`, `chapters: only 2 chapters, YouTube needs at least 3.` Warnings are printed and stored in `timing.json`.
+Each warning is a short sentence with the identifier. Examples: `P17: low confidence (0.62). The narration may differ from the script.`, `P23: not found in the audio.` (`parts` mode) or `P23: no audio file.` (`per-paragraph` mode), `notes.wav: matches no paragraph of the script, ignored.`, `chapters: only 2 chapters, YouTube needs at least 3.` Warnings are printed and stored in `timing.json`.
 
 ## 8. Errors
 

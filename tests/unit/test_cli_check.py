@@ -65,9 +65,9 @@ def test_messages_are_not_read_as_markup(tmp_path: Path, plain: Callable[[str], 
     assert "[red]x.md" in plain(result.stderr)
 
 
-def test_invalid_text_mode_is_a_usage_error() -> None:
+def test_invalid_text_mode_is_a_user_error() -> None:
     result = runner.invoke(app, ["check", str(EXAMPLE), "--text", "both"])
-    assert result.exit_code == 2
+    assert result.exit_code == 1
 
 
 def test_debug_shows_the_traceback_instead_of_a_message() -> None:

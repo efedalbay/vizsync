@@ -16,6 +16,7 @@ dependencies = [
     "pyyaml",
     "rich",
     "rapidfuzz>=3",
+    "faster-whisper>=1",
 ]
 
 [project.scripts]
@@ -57,6 +58,17 @@ plugins = ["pydantic.mypy"]
 warn_unused_ignores = true
 warn_redundant_casts = true
 disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = ["faster_whisper", "faster_whisper.*", "ctranslate2"]
+ignore_missing_imports = true
+
+# PyAV's types refer to numpy's, whose stubs use Python 3.12 syntax that mypy rejects when it
+# checks for 3.11. vizsync does not use numpy, so mypy does not follow into it.
+[[tool.mypy.overrides]]
+module = ["numpy", "numpy.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true
 
 [[tool.mypy.overrides]]
 module = ["vizsync.script.*", "vizsync.match.*", "vizsync.output.*"]

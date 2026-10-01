@@ -44,3 +44,10 @@ def test_timed_words_lays_words_end_to_end() -> None:
 
 def test_timed_words_of_empty_text() -> None:
     assert timed_words("   ") == []
+
+
+def test_fake_transcriber_can_return_different_words_per_file() -> None:
+    first, second = timed_words("one two"), timed_words("three")
+    transcriber = FakeTranscriber({Path("a.wav"): first, Path("b.wav"): second})
+    assert transcriber.transcribe(Path("b.wav"), language="en") == second
+    assert transcriber.transcribe(Path("a.wav"), language="en") == first
