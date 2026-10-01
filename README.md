@@ -4,7 +4,7 @@ Find out where each paragraph of your script starts and ends in your narration a
 
 vizsync takes a narration recording and the numbered script it was read from, and returns the start and end time of every paragraph. It is built for video makers who write a script first, record a voice-over, and then need to know exactly when to place charts, cut footage or add chapter markers.
 
-> **Status: in development, not released.** `vizsync check` and `vizsync align` (with `timing.json` and `timing.csv`) work from source. `chapters.txt`, `markers.edl` and the vizreel chart timing are not implemented yet, and the package is not on PyPI yet.
+> **Status: in development, not released.** `vizsync check` and `vizsync align` (with `timing.json`, `timing.csv`, `chapters.txt` and `markers.edl`) work from source. The vizreel chart timing is not implemented yet, the DaVinci Resolve import of `markers.edl` has not been tried in Resolve yet, and the package is not on PyPI yet.
 
 ## Why
 
@@ -28,8 +28,8 @@ Written to `out/`:
 |---|---|
 | `timing.json` | Full result. The source of truth for other tools |
 | `timing.csv` | Open in a spreadsheet |
-| `chapters.txt` | Paste into a YouTube description (planned) |
-| `markers.edl` | Import as timeline markers in DaVinci Resolve (planned) |
+| `chapters.txt` | Paste into a YouTube description |
+| `markers.edl` | Import as timeline markers in DaVinci Resolve |
 
 With a small map file, vizsync also works out how long each chart clip must be, for use with [vizreel](https://github.com/efedalbay/vizreel).
 
@@ -44,6 +44,14 @@ P1 — Northwind was worth 740 million dollars at its peak.
 
 P2 — Then one decision changed everything.
 ```
+
+## Using the results
+
+**YouTube chapters.** Open `chapters.txt`, copy the lines into the video description. YouTube needs the first chapter at `00:00`, at least three chapters and at least 10 seconds per chapter; vizsync warns when the list breaks one of these.
+
+**DaVinci Resolve.** Run `vizsync align` with the frame rate of your timeline, for example `--fps 25`. In Resolve choose Timeline → Import → Timeline Markers from EDL and pick `markers.edl`. Resolve starts new timelines at `01:00:00:00`, which is what vizsync assumes; if your timeline starts at `00:00:00:00`, add `--timeline-start 00:00:00:00`.
+
+**CapCut.** CapCut cannot import markers from a file (none is known to vizsync). Open `timing.csv` in a spreadsheet, or `chapters.txt`, and place your cuts, text or charts at those times by hand.
 
 ## Audio input
 

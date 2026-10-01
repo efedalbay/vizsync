@@ -93,7 +93,9 @@ Aligns the script to the audio and writes the output files.
 | `--gap` | `0` | Seconds of silence assumed between consecutive audio parts (`parts` mode) |
 | `--min-confidence` | `0.8` | Below this a paragraph is reported as `low_confidence` |
 | `--strict` | off | Exit code 1 if any warning was produced |
-| `--formats` | `json,csv,chapters,edl` | Comma-separated list of files to write. `chapters` and `edl` are not implemented yet: asking for them prints a notice and skips them |
+| `--formats` | `json,csv,chapters,edl` | Comma-separated list of files to write |
+| `--fps` | `30` | Frame rate of the video, used for `markers.edl`: `23.976`, `24`, `25`, `29.97`, `30`, `50`, `59.94` or `60`. Anything else is an error (exit code `1`), reported before any listening starts; ignored when `edl` is not in `--formats` |
+| `--timeline-start` | `01:00:00:00` | Timecode `HH:MM:SS:FF` where the editor's timeline starts, used for `markers.edl`. DaVinci Resolve starts new timelines at `01:00:00:00` |
 
 Exit codes: `0` success (warnings allowed unless `--strict`), `1` user error (bad script, missing file, invalid option or value, unwritable output folder), `2` alignment finished but at least one paragraph is `missing`. If a paragraph is `missing`, the exit code is `2` even with `--strict`.
 
@@ -181,15 +183,32 @@ Header: `id,chapter,start,end,duration,confidence,status`. One row per paragraph
 
 ### `chapters.txt`
 
-YouTube description format, one line per chapter: `MM:SS Title`. Rules applied:
+YouTube description format, one line per chapter: `MM:SS Title`. If the video lasts an hour or more, every line uses `H:MM:SS` instead (`0:00:00 Title`). The title is the chapter title of the script (the same one as in `timing.json`). The file is UTF-8, ends with a newline, and holds the lines only. Rules applied:
 
-- The first chapter is written at `00:00` (YouTube requires it), even if narration starts later. If the real start differs by more than 1 s a warning says so.
-- Times are rounded down to whole seconds.
-- Warnings when there are fewer than 3 chapters or a chapter is shorter than 10 s (YouTube ignores the list in those cases).
+- The first chapter is written at `00:00` (YouTube requires it), even if narration starts later. If the real start is more than 1 s after zero, a warning says so: `chapters: 'The Hook' starts at 00:04 but YouTube needs the first chapter at 00:00; it is written at 00:00.`
+- Times are rounded down to whole seconds. They include `--offset`.
+- A chapter whose paragraphs are all `missing` is left out, with a warning: `chapters: 'The Fall' skipped, none of its paragraphs was found.` The first chapter that is left is the one written at `00:00`. If no chapter is left, the file is not written.
+- Warnings when fewer than 3 chapters are listed (`chapters: only 2 chapters, YouTube needs at least 3.`) or a chapter is shorter than 10 s (`chapters: 'The Hook' is only 6 s long, YouTube needs at least 10 s.`). YouTube ignores the list in those cases. A chapter lasts until the next listed chapter starts; the last one lasts until the end of the video (`--offset` plus `total_duration`).
+
+These warnings are added only when `chapters` is in `--formats`, and they are stored in `timing.json` like any other warning.
 
 ### `markers.edl`
 
-An EDL file that DaVinci Resolve imports as timeline markers (Timeline → Import → Timeline Markers from EDL). One marker per paragraph, named with the identifier, at the paragraph `start`. Frame rate is set with `--fps` (default 30). Import into Resolve must be verified by hand in milestone M4 and the result documented in the README.
+An EDL file that DaVinci Resolve imports as timeline markers (Timeline → Import → Timeline Markers from EDL). One marker per paragraph that was found, named with the identifier, at the paragraph `start`, one frame long, in the order of the script. A `missing` paragraph has no marker.
+
+```
+TITLE: northwind
+FCM: NON-DROP FRAME
+
+001  001      V     C        01:00:00:12 01:00:00:13 01:00:00:12 01:00:00:13  
+ |C:ResolveColorBlue |M:P1 |D:1
+```
+
+- `TITLE` is the script file name without its extension.
+- Timecodes are `HH:MM:SS:FF` and start at `--timeline-start`. The frame is the nearest one to the paragraph start. Frames are counted at the real frame rate (29.97 counts 29.97 per second) and written at the nominal one (30); drop-frame timecode is not supported.
+- Lines end with `\n`, the file is UTF-8 and ends with a newline.
+
+Resolve places a marker by the record timecode of its event, so the timeline's start matters: if the timeline in Resolve starts at 00:00:00:00, pass `--timeline-start 00:00:00:00`. Import into Resolve is not verified yet (see `docs/ROADMAP.md`, M4).
 
 ## 6. Chart timing for vizreel
 

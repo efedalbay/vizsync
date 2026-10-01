@@ -98,7 +98,8 @@ vizsync/
 │   │   ├── timing.py          ← timing.json models and writer
 │   │   ├── table.py           ← csv
 │   │   ├── chapters.py        ← chapters.txt
-│   │   └── edl.py             ← markers.edl
+│   │   ├── edl.py             ← markers.edl
+│   │   └── files.py           ← which files to write; chapter warnings join the result first
 │   └── integrations/
 │       └── vizreel.py         ← chart map → start/duration
 └── tests/

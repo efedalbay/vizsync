@@ -45,10 +45,12 @@ Work proceeds one milestone at a time. A milestone is done only when every accep
 ## M4 — Chapters and editor markers
 
 - `chapters.txt` with the YouTube rules from SPEC §5 and their warnings.
-- `markers.edl` and `--fps`.
+- `markers.edl`, `--fps` and `--timeline-start`.
 - Import `markers.edl` into DaVinci Resolve on Windows and confirm the markers land on the right frames. If Resolve needs a different EDL dialect, adjust and document. Document what to do in CapCut (no marker import known: list the times instead).
 
 **Done when:** markers verified in Resolve by Efe and the README explains the steps.
+
+*Status:* the code, tests and README steps are done. Efe has no DaVinci Resolve yet (he edits in CapCut), so the Resolve import is the one criterion still open. It is checked as soon as he installs Resolve (the free version is enough) or someone else tries the file.
 
 ## M5 — vizreel chart timing
 

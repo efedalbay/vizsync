@@ -1,4 +1,5 @@
 import json
+import math
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -199,11 +200,11 @@ def test_low_confidence_is_a_warning_and_strict_makes_it_exit_1(env: Env) -> Non
     words = garbled_last_paragraph()
     env.stub = Stub(words)
     (wav,) = env.audio("all.wav")
-    relaxed = env.align(wav)
+    relaxed = env.align(wav, "--formats", "json")
     assert relaxed.exit_code == 0
     assert env.timing()["paragraphs"][3]["status"] == "low_confidence"
     assert len(env.timing()["warnings"]) == 1
-    assert env.align(wav, "--strict").exit_code == 1
+    assert env.align(wav, "--formats", "json", "--strict").exit_code == 1
 
 
 def test_min_confidence_option(env: Env) -> None:
@@ -286,14 +287,93 @@ def test_only_the_requested_formats_are_written(env: Env) -> None:
     assert csv_only.exit_code == 0
 
 
-def test_formats_that_come_later_are_skipped_with_a_notice(
+def test_chapters_and_markers_are_written_by_default(env: Env) -> None:
+    (wav,) = env.audio("all.wav")
+    assert env.align(wav).exit_code == 0
+    paragraphs = env.timing()["paragraphs"]
+    chapters = (env.out / "chapters.txt").read_text(encoding="utf-8").splitlines()
+    assert chapters[0] == "00:00 One"
+    assert chapters[1] == f"00:{int(paragraphs[2]['start']):02d} Two"
+    edl = (env.out / "markers.edl").read_text(encoding="utf-8")
+    assert edl.startswith("TITLE: demo\nFCM: NON-DROP FRAME\n")
+    assert [line.split("|M:")[1].split(" ")[0] for line in edl.splitlines() if "|M:" in line] == [
+        "P1",
+        "P2",
+        "P3",
+        "P4",
+    ]
+
+
+def test_only_chapters_or_only_markers_can_be_asked_for(env: Env) -> None:
+    (wav,) = env.audio("all.wav")
+    assert env.align(wav, "--formats", "edl").exit_code == 0
+    assert (env.out / "markers.edl").exists()
+    assert not (env.out / "chapters.txt").exists()
+    assert not (env.out / "timing.json").exists()
+    assert env.align(wav, "--formats", "chapters").exit_code == 0
+    assert (env.out / "chapters.txt").exists()
+
+
+def test_chapter_warnings_are_printed_stored_in_timing_json_and_count_for_strict(
     env: Env, plain: Callable[[str], str]
 ) -> None:
     (wav,) = env.audio("all.wav")
     result = env.align(wav)
-    assert "chapters.txt and markers.edl are not available yet" in plain(result.stderr)
-    assert not (env.out / "chapters.txt").exists()
-    assert not (env.out / "markers.edl").exists()
+    assert result.exit_code == 0
+    assert "warning: chapters: only 2 chapters, YouTube needs at least 3." in plain(result.stderr)
+    assert "chapters: only 2 chapters, YouTube needs at least 3." in env.timing()["warnings"]
+    assert env.align(wav, "--strict").exit_code == 1
+
+
+def test_no_chapter_warnings_without_the_chapters_format(env: Env) -> None:
+    (wav,) = env.audio("all.wav")
+    assert env.align(wav, "--formats", "json,edl", "--strict").exit_code == 0
+    assert env.timing()["warnings"] == []
+
+
+def test_fps_and_timeline_start_set_the_marker_timecodes(env: Env) -> None:
+    (wav,) = env.audio("all.wav")
+    result = env.align(
+        wav, "--formats", "json,edl", "--fps", "25", "--timeline-start", "00:00:00:00"
+    )
+    assert result.exit_code == 0
+    edl = (env.out / "markers.edl").read_text(encoding="utf-8")
+    assert "001  001      V     C        00:00:00:00 00:00:00:01 00:00:00:00 00:00:00:01  " in edl
+    frame = math.floor(env.timing()["paragraphs"][1]["start"] * 25 + 0.5)
+    assert f"00:00:{frame // 25:02d}:{frame % 25:02d} " in edl
+
+
+def test_markers_use_one_hour_and_30_fps_unless_told_otherwise(env: Env) -> None:
+    (wav,) = env.audio("all.wav")
+    assert env.align(wav, "--formats", "edl").exit_code == 0
+    edl = (env.out / "markers.edl").read_text(encoding="utf-8")
+    assert "001  001      V     C        01:00:00:00 01:00:00:01 01:00:00:00 01:00:00:01  " in edl
+
+
+def test_an_unsupported_fps_stops_before_any_listening(
+    env: Env, plain: Callable[[str], str]
+) -> None:
+    (wav,) = env.audio("all.wav")
+    result = env.align(wav, "--fps", "12")
+    assert result.exit_code == 1
+    assert "Unsupported --fps 12" in plain(result.stderr)
+    assert env.stub.calls == []
+    assert env.created == []
+
+
+def test_a_bad_timeline_start_stops_before_any_listening(
+    env: Env, plain: Callable[[str], str]
+) -> None:
+    (wav,) = env.audio("all.wav")
+    result = env.align(wav, "--timeline-start", "1:00:00")
+    assert result.exit_code == 1
+    assert "Invalid --timeline-start" in plain(result.stderr)
+    assert env.stub.calls == []
+
+
+def test_fps_is_not_checked_when_no_markers_are_written(env: Env) -> None:
+    (wav,) = env.audio("all.wav")
+    assert env.align(wav, "--formats", "json", "--fps", "12").exit_code == 0
 
 
 def test_unknown_format_is_a_usage_error(env: Env, plain: Callable[[str], str]) -> None:
