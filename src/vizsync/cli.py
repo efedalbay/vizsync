@@ -2,11 +2,11 @@
 
 import math
 import sys
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
@@ -61,6 +61,24 @@ def _make_wrong_options_exit_with_1() -> None:
 
 
 _make_wrong_options_exit_with_1()
+
+
+def _make_streams_safe(streams: Iterable[Any]) -> None:
+    """Keep a character the output cannot show from crashing a run, and write UTF-8 to pipes.
+
+    A terminal takes its own encoding, which Python handles. Output that is redirected or
+    captured would be written in the legacy code page of the system (cp1254 on a Turkish
+    Windows), which a reader that expects UTF-8 shows as a replacement character, so it is
+    written as UTF-8 instead.
+    """
+    for stream in streams:
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        if getattr(stream, "isatty", lambda: False)():
+            reconfigure(errors="replace")
+        else:
+            reconfigure(encoding="utf-8", errors="replace")
 
 
 def _show_version(value: bool) -> None:
@@ -126,12 +144,7 @@ def main(
     ),
 ) -> None:
     """Find where each paragraph of a script starts and ends in a narration recording."""
-    # A character the console cannot show (a Turkish title in a legacy code page, say) must
-    # never crash a run.
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
-            reconfigure(errors="replace")
+    _make_streams_safe([sys.stdout, sys.stderr])
 
 
 @app.command()
