@@ -360,3 +360,54 @@ def test_parse_error_carries_the_path() -> None:
     with pytest.raises(ScriptParseError) as info:
         parse_script("P1 — x\n", TextMode.QUOTE, path=Path("s.md"))
     assert str(info.value) == "s.md line 1: P1 has no blockquote (use --text inline?)"
+
+
+# --- Emphasised identifiers (`**P1** —`) -----------------------------------------------------
+
+
+@pytest.mark.parametrize("name", ["bold", "italic", "underscore"])
+def test_emphasised_identifiers_are_paragraphs_in_quote_mode(name: str) -> None:
+    script = load_script(FIXTURES / f"emphasis_{name}.md", TextMode.QUOTE)
+    assert [c.title for c in script.chapters] == ["The Hook", "The Fall"]
+    assert [p.id for p in script.paragraphs] == ["P1", "P2", "P3"]
+    assert script.paragraphs[0].text == "Northwind was worth 740 million dollars at its peak."
+    assert script.paragraphs[0].line == 5
+
+
+@pytest.mark.parametrize("name", ["bold", "italic", "underscore"])
+def test_emphasised_identifiers_are_paragraphs_in_inline_mode(name: str) -> None:
+    script = load_script(FIXTURES / f"emphasis_{name}.md", TextMode.INLINE)
+    assert [c.title for c in script.chapters] == ["Kanca", "Düşüş"]
+    assert script.paragraphs[0].text == "Northwind, zirvesinde 740 milyon dolar değerindeydi."
+
+
+@pytest.mark.parametrize("mark", ["**", "*", "__"])
+@pytest.mark.parametrize("separator", ["—", "–", "-", ":", "."])
+def test_emphasised_identifiers_take_every_separator(mark: str, separator: str) -> None:
+    paragraph = parse(f"{mark}p7{mark}{separator}Text.", TextMode.INLINE).paragraphs[0]
+    assert (paragraph.id, paragraph.number, paragraph.text) == ("P7", 7, "Text.")
+
+
+@pytest.mark.parametrize("mark", ["**", "*", "__"])
+def test_emphasised_identifier_without_separator_is_an_error(mark: str) -> None:
+    text = f"{mark}P1{mark} Text without a separator."
+    assert problems_of(text, TextMode.INLINE) == [
+        (
+            1,
+            "P1 is missing a separator after the identifier "
+            "(use '-', ':', '.', an en dash or an em dash)",
+        ),
+        (None, "no paragraphs found"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "line", ["**P1* — Text.", "*P1** — Text.", "**P1__ — Text.", "_P1_ — Text."]
+)
+def test_mismatched_emphasis_is_not_a_paragraph_line(line: str) -> None:
+    assert problems_of(line, TextMode.INLINE) == [(None, "no paragraphs found")]
+
+
+def test_emphasised_and_plain_identifiers_can_be_mixed_but_numbers_stay_unique() -> None:
+    text = "**P1** — One.\n\nP2 — Two.\n\n__P2__ — Again.\n"
+    assert problems_of(text, TextMode.INLINE) == [(5, "P2 is repeated (first at line 3)")]

@@ -7,8 +7,9 @@ from pathlib import Path
 from vizsync.errors import ScriptError, ScriptParseError, ScriptProblem
 from vizsync.script.models import Chapter, Paragraph, Script, TextMode
 
-_PARAGRAPH_LINE = re.compile(r"^[Pp](\d+)[ \t]*[—–\-:.][ \t]*(.*)$")
-_MISSING_SEPARATOR = re.compile(r"^[Pp](\d+)(?:\s|$)")
+_IDENTIFIER = r"(?:(?P<mark>\*\*|__|\*)[Pp](?P<marked>\d+)(?P=mark)|[Pp](?P<plain>\d+))"
+_PARAGRAPH_LINE = re.compile(rf"^{_IDENTIFIER}[ \t]*[—–\-:.][ \t]*(?P<text>.*)$")
+_MISSING_SEPARATOR = re.compile(rf"^{_IDENTIFIER}(?:\s|$)")
 _HEADING = re.compile(r"^(#{1,6})(?:[ \t]+(.*?))?[ \t]*$")
 _QUOTE_LINE = re.compile(r"^>[ \t]?(.*)$")
 _LINE_BREAK = re.compile(r"\r\n|\r|\n")
@@ -65,6 +66,10 @@ def load_script(path: Path, mode: TextMode = TextMode.QUOTE) -> Script:
     return parse_script(text, mode, path=path)
 
 
+def _number_of(match: re.Match[str]) -> int:
+    return int(match.group("marked") or match.group("plain"))
+
+
 def _chapter_title(heading: str, mode: TextMode) -> str:
     heading = heading.strip()
     if _TITLE_SEPARATOR in heading:
@@ -107,9 +112,9 @@ class _Parser:
 
     def feed(self, line_number: int, line: str) -> None:
         if match := _PARAGRAPH_LINE.match(line):
-            self._start_paragraph(line_number, int(match.group(1)), match.group(2))
+            self._start_paragraph(line_number, _number_of(match), match.group("text"))
         elif match := _MISSING_SEPARATOR.match(line):
-            self._report_missing_separator(line_number, int(match.group(1)))
+            self._report_missing_separator(line_number, _number_of(match))
         elif match := _HEADING.match(line):
             self._start_heading(line_number, len(match.group(1)), match.group(2) or "")
         elif match := _QUOTE_LINE.match(line):
