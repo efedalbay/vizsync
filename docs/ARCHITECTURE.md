@@ -104,7 +104,7 @@ vizsync/
 │   │   ├── srt.py             ← captions.srt (cues from the script text and the matched word times)
 │   │   └── files.py           ← which files to write; chapter warnings join the result first
 │   └── integrations/
-│       ├── chartmap.py        ← chart map file → validated model
+│       ├── chartmap.py        ← chart map file or chart tags of the script → validated model
 │       └── vizreel.py         ← paragraph times + chart map → start/duration (pure) and YAML text
 └── tests/
     ├── unit/                  ← fast, no model, no audio

@@ -145,3 +145,116 @@ def test_a_paragraph_listed_twice_in_one_chart_is_an_error() -> None:
 def test_every_problem_is_reported_together() -> None:
     text = "version: 3\ncharts:\n  Bad:\n    paragraphs: [P1]\n  b:\n    paragraphs: []\n"
     assert len(problems(text)) == 3
+
+
+# --- Chart tags in the script ---------------------------------------------------------------------
+
+from vizsync.integrations.chartmap import (  # noqa: E402
+    ChartMap,
+    chart_map_from_script,
+    merge_chart_maps,
+)
+from vizsync.script.models import TextMode  # noqa: E402
+from vizsync.script.parser import load_script, parse_script  # noqa: E402
+
+SCRIPT_FILE = Path("senaryo.md")
+
+
+def script_with(*lines: str):
+    """A script of four paragraphs; ``lines`` is placed after the first line of each paragraph."""
+    text = ""
+    for number in range(1, 5):
+        text += f"P{number} — Text {number}.\n"
+        for line in lines:
+            if line.startswith(f"{number}:"):
+                text += line.split(":", 1)[1] + "\n"
+        text += "\n"
+    return parse_script(text, TextMode.INLINE)
+
+
+def script_problems(*lines: str) -> list[str]:
+    with pytest.raises(ChartMapError) as caught:
+        chart_map_from_script(script_with(*lines), source=SCRIPT_FILE)
+    return str(caught.value).splitlines()
+
+
+def test_paragraphs_with_the_same_chart_tag_make_one_chart() -> None:
+    script = script_with(
+        "1:<!-- chart: bet-size -->",
+        "2:<!-- chart: valuation -->",
+        "3:<!-- chart: valuation -->",
+    )
+    result = chart_map_from_script(script, source=SCRIPT_FILE)
+    assert result.charts == [
+        ChartEntry("bet-size", ["P1"], False),
+        ChartEntry("valuation", ["P2", "P3"], False),
+    ]
+
+
+def test_a_sequence_tag_on_every_paragraph_makes_a_sequence() -> None:
+    script = script_with(
+        "2:<!-- chart: collapse, sequence -->",
+        "3:<!-- chart: collapse, sequence -->",
+        "4:<!-- chart: collapse, sequence -->",
+    )
+    (chart,) = chart_map_from_script(script, source=SCRIPT_FILE).charts
+    assert chart == ChartEntry("collapse", ["P2", "P3", "P4"], True)
+
+
+def test_a_paragraph_in_two_charts_is_in_both() -> None:
+    script = script_with("1:<!-- chart: a -->", "1:<!-- chart: b -->", "2:<!-- chart: b -->")
+    assert chart_map_from_script(script, source=SCRIPT_FILE).charts == [
+        ChartEntry("a", ["P1"], False),
+        ChartEntry("b", ["P1", "P2"], False),
+    ]
+
+
+def test_a_script_without_tags_gives_an_empty_map() -> None:
+    assert chart_map_from_script(script_with(), source=SCRIPT_FILE).charts == []
+
+
+def test_sequence_on_only_some_paragraphs_of_a_chart_is_an_error_naming_the_line() -> None:
+    message = "'sequence' must be on every paragraph of the chart or on none"
+    assert script_problems(
+        "2:<!-- chart: collapse, sequence -->", "3:<!-- chart: collapse -->"
+    ) == [f"senaryo.md line 7: charts.collapse: {message}"]
+
+
+def test_a_sequence_of_one_paragraph_is_an_error() -> None:
+    assert script_problems("2:<!-- chart: collapse, sequence -->") == [
+        "senaryo.md line 4: charts.collapse: a sequence needs 2 to 8 paragraphs, got 1"
+    ]
+
+
+def test_a_chart_id_windows_reserves_is_an_error() -> None:
+    assert script_problems("1:<!-- chart: con -->") == [
+        "senaryo.md line 2: charts.con: 'con' is a name Windows reserves"
+    ]
+
+
+def test_the_example_script_and_the_example_map_describe_the_same_charts() -> None:
+    examples = Path(__file__).resolve().parents[2] / "examples"
+    script = load_script(examples / "northwind-script.md", TextMode.QUOTE)
+    from_script = chart_map_from_script(script, source=examples / "northwind-script.md")
+    assert from_script.charts == load_chart_map(examples / "chart-map.yaml").charts
+
+
+# --- Using the map file and the script together -------------------------------------------------
+
+
+def test_two_maps_are_put_together_in_order() -> None:
+    first = ChartMap([ChartEntry("a", ["P1"], False)])
+    second = ChartMap([ChartEntry("b", ["P2"], False)])
+    merged = merge_chart_maps(first, second, names=("map.yaml", "senaryo.md"))
+    assert [chart.id for chart in merged.charts] == ["a", "b"]
+
+
+def test_a_chart_in_both_maps_is_an_error_naming_both_sources() -> None:
+    first = ChartMap([ChartEntry("a", ["P1"], False), ChartEntry("b", ["P2"], False)])
+    second = ChartMap([ChartEntry("b", ["P3"], False), ChartEntry("a", ["P4"], False)])
+    with pytest.raises(ChartMapError) as caught:
+        merge_chart_maps(first, second, names=("map.yaml", "senaryo.md"))
+    assert str(caught.value).splitlines() == [
+        "charts.a is in both map.yaml and senaryo.md; give each chart in one place",
+        "charts.b is in both map.yaml and senaryo.md; give each chart in one place",
+    ]

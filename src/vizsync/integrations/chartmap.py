@@ -13,6 +13,7 @@ from typing import Any
 import yaml
 
 from vizsync.errors import ChartMapError
+from vizsync.script.models import ChartTag, Script
 
 SUPPORTED_VERSION = 1
 SEQUENCE_CLIPS = (2, 8)
@@ -69,6 +70,106 @@ def parse_chart_map(text: str, *, source: Path) -> ChartMap:
     if problems:
         raise ChartMapError("\n".join(f"{source}: {problem}" for problem in problems))
     return ChartMap(charts)
+
+
+def chart_map_from_script(script: Script, *, source: Path) -> ChartMap:
+    """Build the chart map from the ``<!-- chart: ID -->`` tags of a script.
+
+    The paragraphs with the same chart id make one chart, in script order; ``sequence`` must be
+    on every tag of a chart or on none. A script without tags gives an empty map.
+
+    Args:
+        script: The parsed script.
+        source: The script file, used only to name it in messages.
+
+    Raises:
+        ChartMapError: Listing every problem, each with the line of the tag.
+    """
+    tagged: dict[str, list[tuple[str, ChartTag]]] = {}
+    for paragraph in script.paragraphs:
+        for tag in paragraph.charts:
+            tagged.setdefault(tag.id, []).append((paragraph.id, tag))
+    entries: list[ChartEntry] = []
+    problems: list[str] = []
+    for chart_id, items in tagged.items():
+        first_line = items[0][1].line
+        flags = [tag.sequence for _, tag in items]
+        found = len(problems)
+        if _WINDOWS_RESERVED.match(chart_id):
+            problems.append(
+                _at(source, first_line, chart_id, f"'{chart_id}' is a name Windows reserves")
+            )
+        if len(set(flags)) > 1:
+            odd = next(tag.line for _, tag in items if tag.sequence != flags[0])
+            problems.append(
+                _at(
+                    source,
+                    odd,
+                    chart_id,
+                    "'sequence' must be on every paragraph of the chart or on none",
+                )
+            )
+        elif flags[0]:
+            fewest, most = SEQUENCE_CLIPS
+            if not fewest <= len(items) <= most:
+                problems.append(
+                    _at(
+                        source,
+                        first_line,
+                        chart_id,
+                        f"a sequence needs {fewest} to {most} paragraphs, got {len(items)}",
+                    )
+                )
+        if len(problems) == found:
+            entries.append(ChartEntry(chart_id, [name for name, _ in items], flags[0]))
+    if problems:
+        raise ChartMapError("\n".join(problems))
+    return ChartMap(entries)
+
+
+def merge_chart_maps(first: ChartMap, second: ChartMap, *, names: tuple[str, str]) -> ChartMap:
+    """Put two chart maps together, the charts of ``first`` before those of ``second``.
+
+    Raises:
+        ChartMapError: If a chart is in both, naming ``names``.
+    """
+    known = {chart.id for chart in first.charts}
+    problems = [
+        f"charts.{chart.id} is in both {names[0]} and {names[1]}; give each chart in one place"
+        for chart in second.charts
+        if chart.id in known
+    ]
+    problems.sort()
+    if problems:
+        raise ChartMapError("\n".join(problems))
+    return ChartMap([*first.charts, *second.charts])
+
+
+def collect_charts(
+    *, map_file: Path | None, script: Script | None, script_file: Path | None
+) -> ChartMap:
+    """The charts of a chart map file, of the tags of a script, or of both together.
+
+    Raises:
+        ChartMapError: If a chart is in both, a source has problems, or there is no chart at all.
+    """
+    from_file = load_chart_map(map_file) if map_file is not None else None
+    from_script = None
+    if script is not None and script_file is not None:
+        from_script = chart_map_from_script(script, source=script_file)
+    if from_file is not None and from_script is not None and map_file and script_file:
+        return merge_chart_maps(from_file, from_script, names=(map_file.name, script_file.name))
+    found = from_file or from_script
+    if found is None or not found.charts:
+        raise ChartMapError(
+            "No chart found: tag the paragraphs with <!-- chart: ID --> or give a chart map",
+            path=script_file or map_file,
+        )
+    return found
+
+
+def _at(source: Path, line: int, chart_id: str, message: str) -> str:
+    return f"{source} line {line}: charts.{chart_id}: {message}"
 
 
 def _charts(data: Any, problems: list[str]) -> list[ChartEntry]:

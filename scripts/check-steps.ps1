@@ -74,6 +74,9 @@ Invoke-Step "aligner benchmark" {
 Invoke-Step "durations: example" {
     uv run vizsync durations examples/timing.example.json --map examples/chart-map.yaml
 }
+Invoke-Step "durations: example, charts tagged in the script" {
+    uv run vizsync durations examples/timing.example.json --script examples/northwind-script.md
+}
 
 # M3: the real speech model on the fixture clip. The first run downloads the model.
 if ($NoModel) {

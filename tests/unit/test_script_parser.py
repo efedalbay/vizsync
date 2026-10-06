@@ -411,3 +411,96 @@ def test_mismatched_emphasis_is_not_a_paragraph_line(line: str) -> None:
 def test_emphasised_and_plain_identifiers_can_be_mixed_but_numbers_stay_unique() -> None:
     text = "**P1** — One.\n\nP2 — Two.\n\n__P2__ — Again.\n"
     assert problems_of(text, TextMode.INLINE) == [(5, "P2 is repeated (first at line 3)")]
+
+
+# --- Chart tags (`<!-- chart: bet-size -->`) --------------------------------------------------
+
+
+def charts_of(text: str, mode: TextMode = TextMode.INLINE) -> list[list[tuple[str, bool, int]]]:
+    return [[(t.id, t.sequence, t.line) for t in p.charts] for p in parse(text, mode).paragraphs]
+
+
+def test_a_chart_tag_below_a_paragraph_belongs_to_it() -> None:
+    text = "P1 — One.\n<!-- chart: bet-size -->\n\nP2 — Two.\n"
+    assert charts_of(text) == [[("bet-size", False, 2)], []]
+
+
+def test_a_chart_tag_after_a_blank_line_and_a_quote_still_belongs_to_the_paragraph() -> None:
+    text = "P1 — Bir.\n\n> One.\n\n<!-- chart: bet-size -->\n\nP2 — İki.\n\n> Two.\n"
+    assert charts_of(text, TextMode.QUOTE) == [[("bet-size", False, 5)], []]
+
+
+def test_a_chart_tag_on_the_paragraph_line_belongs_to_that_paragraph() -> None:
+    text = "P1 — One.\n\nP2 — Two. <!-- chart: bet-size -->\n"
+    assert charts_of(text) == [[], [("bet-size", False, 3)]]
+
+
+def test_the_tag_is_not_part_of_the_aligned_text() -> None:
+    text = "P1 — One <!-- chart: a --> and\n<!-- chart: b -->\ncontinues.\n"
+    paragraph = parse(text, TextMode.INLINE).paragraphs[0]
+    assert paragraph.text == "One and continues."
+    assert [t.id for t in paragraph.charts] == ["a", "b"]
+
+
+def test_a_sequence_chart_tag_and_the_spelling_of_the_tag() -> None:
+    text = (
+        "P1 — One.\n<!--chart:collapse,sequence-->\n\n"
+        "P2 — Two.\n<!--   CHART :  collapse ,  Sequence   -->\n"
+    )
+    assert charts_of(text) == [[("collapse", True, 2)], [("collapse", True, 5)]]
+
+
+def test_a_paragraph_can_be_in_several_charts() -> None:
+    text = "P1 — One.\n<!-- chart: a -->\n<!-- chart: b, sequence -->\n"
+    assert charts_of(text) == [[("a", False, 2), ("b", True, 3)]]
+
+
+def test_other_html_comments_are_left_alone() -> None:
+    text = "P1 — One. <!-- TODO check -->\n<!-- chartreuse: yes -->\n"
+    assert charts_of(text) == [[]]
+    assert parse(text, TextMode.INLINE).paragraphs[0].text == "One."
+
+
+def test_a_chart_tag_on_a_heading_or_before_any_paragraph_is_an_error() -> None:
+    text = "<!-- chart: a -->\n\n## 1. Bir\n\n<!-- chart: b -->\n\nP1 — One.\n"
+    assert problems_of(text, TextMode.INLINE) == [
+        (1, "the chart tag is not under a paragraph"),
+        (5, "the chart tag is not under a paragraph"),
+    ]
+
+
+def test_a_chart_tag_after_a_heading_is_not_under_the_paragraph_above() -> None:
+    text = "P1 — One.\n\n## 2. Two\n<!-- chart: a -->\n\nP2 — Two.\n"
+    assert problems_of(text, TextMode.INLINE) == [(4, "the chart tag is not under a paragraph")]
+
+
+@pytest.mark.parametrize(
+    "tag",
+    ["<!-- chart: -->", "<!-- chart: , sequence -->", "<!-- chart: a, sequence, x -->"],
+)
+def test_a_chart_tag_with_no_usable_id_is_an_error(tag: str) -> None:
+    (_, message), *_ = problems_of(f"P1 — One.\n{tag}\n", TextMode.INLINE)
+    assert message.startswith("invalid chart tag")
+    assert "<!-- chart: bet-size -->" in message and "sequence" in message
+
+
+def test_a_chart_id_with_a_forbidden_character_is_an_error() -> None:
+    assert problems_of("P1 — One.\n<!-- chart: Bet_Size -->\n", TextMode.INLINE) == [
+        (2, "chart id 'Bet_Size' may only use a-z, 0-9 and '-'")
+    ]
+
+
+def test_an_unknown_chart_option_is_an_error() -> None:
+    assert problems_of("P1 — One.\n<!-- chart: a, loop -->\n", TextMode.INLINE) == [
+        (2, "unknown chart option 'loop' (the only option is 'sequence')")
+    ]
+
+
+def test_the_same_chart_twice_on_a_paragraph_is_an_error() -> None:
+    text = "P1 — One.\n<!-- chart: a -->\n<!-- chart: a -->\n"
+    assert problems_of(text, TextMode.INLINE) == [(3, "chart 'a' is tagged twice on P1")]
+
+
+def test_every_chart_tag_problem_is_reported_with_the_other_problems() -> None:
+    text = "P1 — One.\n<!-- chart: A -->\n\nP1 — Again.\n<!-- chart: b, x -->\n"
+    assert [line for line, _ in problems_of(text, TextMode.INLINE)] == [2, 4, 5]

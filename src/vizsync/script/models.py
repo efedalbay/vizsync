@@ -12,6 +12,19 @@ class TextMode(StrEnum):
     INLINE = "inline"
 
 
+class ChartTag(BaseModel):
+    """A ``<!-- chart: ID -->`` tag under a paragraph: the vizreel chart this paragraph is part of.
+
+    ``sequence`` is True for ``<!-- chart: ID, sequence -->``. ``line`` is where the tag is.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    id: str
+    sequence: bool = False
+    line: int
+
+
 class Paragraph(BaseModel):
     """One numbered paragraph. ``text`` is the cleaned text used for alignment."""
 
@@ -21,6 +34,7 @@ class Paragraph(BaseModel):
     number: int
     line: int
     text: str
+    charts: list[ChartTag] = []
 
 
 class Chapter(BaseModel):
