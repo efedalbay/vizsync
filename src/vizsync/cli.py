@@ -228,7 +228,7 @@ def align(
         typer.Option(
             "--formats",
             callback=_check_formats,
-            help="Comma-separated files to write: json, csv, chapters, edl.",
+            help="Comma-separated files to write: json, csv, chapters, edl, srt.",
         ),
     ] = ",".join(FORMATS),
     fps: Annotated[

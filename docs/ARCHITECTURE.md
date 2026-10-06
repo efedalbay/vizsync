@@ -53,7 +53,7 @@ audio files ──► audio/inputs.py ──► Timeline (parts with offsets)
                       match/spans.py ───► ParagraphSpan (start, end, confidence, status)
                                         │
                       pipeline.py runs the steps above ──► AlignmentResult
-                      output/ writers ──► timing.json, timing.csv, chapters.txt, markers.edl
+                      output/ writers ──► timing.json, timing.csv, chapters.txt, markers.edl, captions.srt
                       integrations/vizreel.py ──► chart start/duration
 ```
 
@@ -101,6 +101,7 @@ vizsync/
 │   │   ├── table.py           ← csv
 │   │   ├── chapters.py        ← chapters.txt
 │   │   ├── edl.py             ← markers.edl
+│   │   ├── srt.py             ← captions.srt (cues from the script text and the matched word times)
 │   │   └── files.py           ← which files to write; chapter warnings join the result first
 │   └── integrations/
 │       ├── chartmap.py        ← chart map file → validated model

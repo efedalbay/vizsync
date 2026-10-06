@@ -604,3 +604,71 @@ def test_trim_warns_about_a_file_without_speech(
     result = env.align(*files, "--join", "--trim")
     assert result.exit_code == 0
     assert "P1.wav: no speech found, not trimmed." in plain(result.stderr)
+
+
+# --- Captions ----------------------------------------------------------------------------------
+
+
+def parse_srt(path: Path) -> list[tuple[str, str]]:
+    blocks = path.read_text(encoding="utf-8").strip().split("\n\n")
+    return [(b.splitlines()[1], "\n".join(b.splitlines()[2:])) for b in blocks]
+
+
+def test_captions_are_written_by_default_with_the_script_text(env: Env) -> None:
+    (wav,) = env.audio("all.wav")
+    assert env.align(wav).exit_code == 0
+    cues = parse_srt(env.out / "captions.srt")
+    assert [text for _, text in cues] == [
+        "Northwind opened its first office in 2016.",
+        "The team grew quickly after that.",
+        "Revenue doubled within one year.",
+        "Then the biggest customer left.",
+    ]
+    assert not (env.out / "captions.srt").read_bytes().startswith(b"\xef\xbb\xbf")
+
+
+def test_caption_times_follow_the_spoken_words(env: Env) -> None:
+    (wav,) = env.audio("all.wav")
+    assert env.align(wav).exit_code == 0
+    paragraphs = env.timing()["paragraphs"]
+    first_line = (env.out / "captions.srt").read_text(encoding="utf-8").splitlines()[1]
+    start, end = first_line.split(" --> ")
+    assert start == "00:00:00,000"
+    expected = round(paragraphs[0]["end"] * 1000)
+    minutes, rest = end.split(":")[1:]
+    seconds, millis = rest.split(",")
+    assert int(minutes) * 60000 + int(seconds) * 1000 + int(millis) == pytest.approx(
+        expected, abs=1
+    )
+
+
+def test_captions_can_be_asked_for_alone(env: Env) -> None:
+    (wav,) = env.audio("all.wav")
+    assert env.align(wav, "--formats", "srt").exit_code == 0
+    assert (env.out / "captions.srt").exists()
+    assert not (env.out / "timing.json").exists()
+
+
+def test_captions_are_left_out_when_not_asked_for(env: Env) -> None:
+    (wav,) = env.audio("all.wav")
+    assert env.align(wav, "--formats", "json").exit_code == 0
+    assert not (env.out / "captions.srt").exists()
+
+
+def test_a_missing_paragraph_has_no_caption(env: Env) -> None:
+    env.stub = Stub(narration([0, 2, 3]))
+    (wav,) = env.audio("all.wav")
+    assert env.align(wav).exit_code == 2
+    assert len(parse_srt(env.out / "captions.srt")) == 3
+
+
+def test_captions_of_a_joined_narration_use_the_joined_times(env: Env) -> None:
+    files = paragraph_wavs(env)
+    assert env.align(*files, "--join").exit_code == 0
+    cues = parse_srt(env.out / "captions.srt")
+    assert [time.split(" --> ")[0] for time, _ in cues] == [
+        "00:00:00,000",
+        "00:00:01,600",
+        "00:00:03,800",
+        "00:00:05,400",
+    ]

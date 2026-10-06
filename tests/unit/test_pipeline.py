@@ -494,3 +494,44 @@ def test_joining_needs_one_file_per_paragraph(tmp_path: Path) -> None:
     plan = parts_plan("all.wav")
     with pytest.raises(AudioError, match="--join needs one file per paragraph"):
         plan_narration(SCRIPT, plan, target=tmp_path / "n.wav", paragraph_gap=0.6, chapter_gap=1.2)
+
+
+# --- Word times and text for captions -----------------------------------------------------------
+
+
+def test_every_paragraph_carries_its_text_and_the_times_of_its_words() -> None:
+    words = narration("P1", "P2", "P3", "P4")
+    result = run_parts(FakeTranscriber(words), parts_plan("all.wav"), {"all.wav": 40.0})
+    first = result.paragraphs[0]
+    assert first.text == "Northwind opened its first office in 2016."
+    assert [(w.start, w.end) for w in words[:7]] == list(first.word_times)
+
+
+def test_an_unmatched_script_word_has_no_time() -> None:
+    words = narration("P1", "P2", "P3", "P4")
+    words[1] = Word(text="banana", start=words[1].start, end=words[1].end)
+    result = run_parts(FakeTranscriber(words), parts_plan("all.wav"), {"all.wav": 40.0})
+    times = result.paragraphs[0].word_times
+    assert times[1] is None
+    assert times[0] == (words[0].start, words[0].end)
+    assert len(times) == 7
+
+
+def test_a_missing_paragraph_has_no_word_times() -> None:
+    result = run_parts(
+        FakeTranscriber(narration("P1", "P3", "P4")), parts_plan("all.wav"), {"all.wav": 40.0}
+    )
+    assert result.paragraphs[1].word_times == ()
+
+
+def test_paragraph_files_have_text_but_no_word_times() -> None:
+    plan = paragraph_plan("P1", "P2")
+    result = run_alignment(
+        SCRIPT,
+        "demo.md",
+        plan,
+        transcriber=None,
+        read_duration=durations_of({"P1.wav": 3.0, "P2.wav": 2.0}),
+    )
+    assert result.paragraphs[0].text == "Northwind opened its first office in 2016."
+    assert result.paragraphs[0].word_times == ()

@@ -10,11 +10,12 @@ from pathlib import Path
 from vizsync.errors import OutputError
 from vizsync.output.chapters import ChapterList, build_chapters, write_chapters
 from vizsync.output.edl import EdlSettings, build_edl, write_edl
+from vizsync.output.srt import build_captions, format_srt, write_srt
 from vizsync.output.table import write_timing_csv
 from vizsync.output.timing import build_timing, write_timing_json
 from vizsync.pipeline import AlignmentResult
 
-FORMATS = ("json", "csv", "chapters", "edl")
+FORMATS = ("json", "csv", "chapters", "edl", "srt")
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,7 @@ class Outputs:
     formats: list[str]
     chapters: ChapterList | None
     edl_text: str | None
+    srt_text: str | None = None
 
 
 def prepare_outputs(
@@ -39,7 +41,8 @@ def prepare_outputs(
     if "edl" in formats and edl is not None:
         markers = [(p.id, p.start) for p in result.paragraphs if p.start is not None]
         edl_text = build_edl(result.script_name, markers, edl)
-    return Outputs(result, formats, chapters, edl_text)
+    srt_text = format_srt(build_captions(result.paragraphs)) if "srt" in formats else None
+    return Outputs(result, formats, chapters, edl_text, srt_text)
 
 
 def write_outputs(outputs: Outputs, out: Path, *, tool: str) -> list[Path]:
@@ -66,4 +69,7 @@ def write_outputs(outputs: Outputs, out: Path, *, tool: str) -> list[Path]:
     if outputs.edl_text is not None:
         write_edl(outputs.edl_text, out / "markers.edl")
         written.append(out / "markers.edl")
+    if outputs.srt_text:
+        write_srt(outputs.srt_text, out / "captions.srt")
+        written.append(out / "captions.srt")
     return written

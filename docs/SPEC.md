@@ -100,7 +100,7 @@ Aligns the script to the audio and writes the output files.
 | `--paragraph-gap` | `0.6` | With `--join`: seconds of silence between two paragraphs of a chapter |
 | `--chapter-gap` | `1.2` | With `--join`: seconds of silence where a new chapter begins |
 | `--trim` | off | With `--join`: first cut the silence at the start and end of every file (see §3) |
-| `--formats` | `json,csv,chapters,edl` | Comma-separated list of files to write |
+| `--formats` | `json,csv,chapters,edl,srt` | Comma-separated list of files to write |
 | `--fps` | `30` | Frame rate of the video, used for `markers.edl`: `23.976`, `24`, `25`, `29.97`, `30`, `50`, `59.94` or `60`. Anything else is an error (exit code `1`), reported before any listening starts; ignored when `edl` is not in `--formats` |
 | `--timeline-start` | `01:00:00:00` | Timecode `HH:MM:SS:FF` where the editor's timeline starts, used for `markers.edl`. DaVinci Resolve starts new timelines at `01:00:00:00` |
 
@@ -229,6 +229,19 @@ FCM: NON-DROP FRAME
 - Lines end with `\n`, the file is UTF-8 and ends with a newline.
 
 Resolve places a marker by the record timecode of its event, so the timeline's start matters: if the timeline in Resolve starts at 00:00:00:00, pass `--timeline-start 00:00:00:00`. Import into Resolve is not verified yet (see `docs/ROADMAP.md`, M4).
+
+### `captions.srt`
+
+The script text as subtitles (SubRip), timed by the speech. The text is the aligned text of each paragraph (`--text`), already without source marks such as `[5]`, so it is what the script says and not what a recognizer heard. A paragraph that is `missing` has no cue. The file is UTF-8 without a byte order mark, uses `\n` line ends and ends with a newline; times are `HH:MM:SS,mmm`, cues are numbered from 1 and separated by a blank line. If there is no cue at all, the file is not written.
+
+Cues:
+
+- A cue is a sentence, or a part of a long one (a sentence ends at `.`, `!`, `?` or `…`, with closing quotes or brackets). A cue has at most 2 lines of at most 42 characters; a line break falls between words, as evenly as the lines allow. A word longer than a line is kept whole.
+- A sentence that does not fit in two lines is cut after a comma, semicolon, colon or dash when both parts keep at least a fifth of its length, otherwise as evenly as possible between words. The parts are cut again until each fits.
+- A cue lasts at most 7 s: a longer one is cut the same way, at the point nearest to its middle in time.
+- A cue starts when its first word was spoken and ends when its last was, using the times of the words the aligner matched. A script word that matched no recognized word, and every word of a paragraph that was never recognized (`per-paragraph` files, with or without `--join`), is placed between the nearest known times (or the start and end of the paragraph) in proportion to its length. The first cue of a paragraph starts at the paragraph's `start` and the last ends at its `end`.
+- A cue shorter than 1 s is lengthened up to 1 s into free time, never into the next cue. Cues never overlap: a cue is cut short where the next begins.
+- Times include `--offset`, as everywhere else.
 
 ## 6. Chart timing for vizreel
 

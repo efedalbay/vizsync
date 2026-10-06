@@ -4,7 +4,7 @@ Find out where each paragraph of your script starts and ends in your narration a
 
 vizsync takes a narration recording and the numbered script it was read from, and returns the start and end time of every paragraph. It is built for video makers who write a script first, record a voice-over, and then need to know exactly when to place charts, cut footage or add chapter markers.
 
-> **Status: in development, not released.** `vizsync check` and `vizsync align` (with `timing.json`, `timing.csv`, `chapters.txt` and `markers.edl`) work from source. `vizsync durations` (chart timing for vizreel) works too. The DaVinci Resolve import of `markers.edl` has not been tried in Resolve yet, and the package is not on PyPI yet.
+> **Status: in development, not released.** `vizsync check` and `vizsync align` (with `timing.json`, `timing.csv`, `chapters.txt`, `markers.edl` and `captions.srt`) work from source. `vizsync durations` (chart timing for vizreel) works too. The DaVinci Resolve import of `markers.edl` has not been tried in Resolve yet, and the package is not on PyPI yet.
 
 ## Why
 
@@ -30,6 +30,7 @@ Written to `out/`:
 | `timing.csv` | Open in a spreadsheet |
 | `chapters.txt` | Paste into a YouTube description |
 | `markers.edl` | Import as timeline markers in DaVinci Resolve |
+| `captions.srt` | Subtitles with the exact script text, for YouTube or an editor |
 
 With a small map file, vizsync also works out when each chart clip goes on the timeline and how long it must be, for use with [vizreel](https://github.com/efedalbay/vizreel) (see below).
 
@@ -50,6 +51,8 @@ P2 — Then one decision changed everything.
 **YouTube chapters.** Open `chapters.txt`, copy the lines into the video description. YouTube needs the first chapter at `00:00`, at least three chapters and at least 10 seconds per chapter; vizsync warns when the list breaks one of these.
 
 **DaVinci Resolve.** Run `vizsync align` with the frame rate of your timeline, for example `--fps 25`. In Resolve choose Timeline → Import → Timeline Markers from EDL and pick `markers.edl`. Resolve starts new timelines at `01:00:00:00`, which is what vizsync assumes; if your timeline starts at `00:00:00:00`, add `--timeline-start 00:00:00:00`.
+
+**Subtitles.** `captions.srt` holds the text of your script, at most two lines of 42 characters per cue, timed by the spoken words, so it needs no correction for misheard names. Upload it to YouTube (Subtitles → Add language → Upload file → With timing) or import it in your editor. When the narration is one file per paragraph, cue times inside a paragraph are spread by text length, since nothing was recognized.
 
 **CapCut.** CapCut cannot import markers from a file (none is known to vizsync). Open `timing.csv` in a spreadsheet, or `chapters.txt`, and place your cuts, text or charts at those times by hand.
 
