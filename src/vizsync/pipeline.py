@@ -7,7 +7,9 @@ from pathlib import Path
 
 from vizsync.asr.base import Transcriber, Word
 from vizsync.audio.inputs import AudioMode, AudioPlan
+from vizsync.audio.join import JoinLayout, SpeechBounds, plan_join
 from vizsync.audio.timeline import Part, build_timeline, read_duration, total_duration
+from vizsync.errors import AudioError
 from vizsync.match.normalize import normalize_text
 from vizsync.match.pace import Pace, slow_paragraphs
 from vizsync.match.spans import (
@@ -70,6 +72,7 @@ def run_alignment(
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
     read_duration: Callable[[Path], float] = read_duration,
     on_progress: Callable[[str], None] | None = None,
+    joined: JoinLayout | None = None,
 ) -> AlignmentResult:
     """Find every paragraph of ``script`` in the audio described by ``plan``.
 
@@ -88,6 +91,8 @@ def run_alignment(
         min_confidence: Below this a found paragraph is ``low_confidence``.
         read_duration: How to measure a file; replaceable so tests need no audio.
         on_progress: Called with a short message before each slow step.
+        joined: In per-paragraph mode, where each paragraph goes in a joined narration file (see
+            ``plan_narration``). The times are then those of that file, silences included.
     """
     settings = _Settings(
         language=language,
@@ -101,6 +106,8 @@ def run_alignment(
         if transcriber is None:
             raise ValueError("parts mode needs a transcriber")
         outcome = _align_parts(script, plan, transcriber, settings)
+    elif joined is not None:
+        outcome = _align_joined(script, plan, joined, settings)
     else:
         outcome = _align_paragraph_files(script, plan, settings)
     return _assemble(script, script_name, settings.offset, outcome)
@@ -180,6 +187,68 @@ def _align_paragraph_files(script: Script, plan: AudioPlan, settings: _Settings)
         leading_warnings=[
             f"{path.name}: matches no paragraph of the script, ignored." for path in plan.ignored
         ],
+        missing_reason="no audio file.",
+    )
+
+
+def plan_narration(
+    script: Script,
+    plan: AudioPlan,
+    *,
+    target: Path,
+    paragraph_gap: float,
+    chapter_gap: float,
+    speech_bounds: SpeechBounds | None = None,
+) -> JoinLayout:
+    """Plan the joined narration of a per-paragraph recording (see ``audio.join``).
+
+    Raises:
+        AudioError: If the recording is not one file per paragraph, or the files cannot be joined.
+    """
+    if plan.mode is not AudioMode.PER_PARAGRAPH:
+        raise AudioError(
+            "--join needs one file per paragraph (P01.wav, P02.wav, ...), but these files "
+            "are one recording, or parts of one"
+        )
+    paragraphs = [
+        (paragraph.id, number)
+        for number, chapter in enumerate(script.chapters)
+        for paragraph in chapter.paragraphs
+    ]
+    return plan_join(
+        paragraphs,
+        plan.paragraph_files,
+        target=target,
+        paragraph_gap=paragraph_gap,
+        chapter_gap=chapter_gap,
+        speech_bounds=speech_bounds,
+    )
+
+
+def _align_joined(
+    script: Script, plan: AudioPlan, joined: JoinLayout, settings: _Settings
+) -> _Outcome:
+    rate = joined.format.frame_rate
+    by_id = {entry.paragraph_id: entry for entry in joined.entries}
+    spans = []
+    for paragraph in script.paragraphs:
+        paragraph_id = paragraph.id
+        entry = by_id.get(paragraph_id)
+        if entry is None:
+            spans.append(ParagraphSpan(paragraph_id, None, None, 0.0, ParagraphStatus.MISSING))
+            continue
+        start = settings.offset + entry.offset_frames / rate
+        end = settings.offset + (entry.offset_frames + entry.frames) / rate
+        spans.append(ParagraphSpan(paragraph_id, start, end, 1.0, ParagraphStatus.OK))
+    return _Outcome(
+        mode=AudioMode.PER_PARAGRAPH,
+        total_duration=joined.total_seconds,
+        parts=[Part(joined.target, settings.offset, joined.total_seconds)],
+        spans=spans,
+        leading_warnings=[
+            f"{path.name}: matches no paragraph of the script, ignored." for path in plan.ignored
+        ]
+        + joined.warnings,
         missing_reason="no audio file.",
     )
 

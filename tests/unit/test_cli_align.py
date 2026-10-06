@@ -463,3 +463,144 @@ def test_lengths_round_like_the_times(env: Env, plain: Callable[[str], str]) -> 
     out = plain(env.align(*files, "--mode", "per-paragraph").stdout)
     p2 = next(line for line in out.splitlines() if line.startswith("P2"))
     assert "00:04.0 ->" in p2 and "00:07.3" in p2 and "3.3 s" in p2
+
+
+# --- Joining paragraph files into one narration ------------------------------------------------
+
+
+def wav_frames(path: Path) -> tuple[int, int]:
+    import wave
+
+    with wave.open(str(path), "rb") as wav:
+        return wav.getnframes(), wav.getframerate()
+
+
+def paragraph_wavs(env: Env, seconds: float = 1.0, rate: int = 16000) -> list[Path]:
+    from fakes import write_silent_wav
+
+    return [write_silent_wav(env.folder / f"P{n}.wav", seconds, rate) for n in (1, 2, 3, 4)]
+
+
+def test_join_writes_the_narration_and_times_that_match_it(env: Env) -> None:
+    files = paragraph_wavs(env)
+    result = env.align(*files, "--join")
+    assert result.exit_code == 0
+    frames, rate = wav_frames(env.out / "narration.wav")
+    data = env.timing()
+    assert data["mode"] == "per-paragraph"
+    assert data["total_duration"] == frames / rate == 6.4
+    assert data["audio"] == [{"file": "narration.wav", "offset": 0.0, "duration": 6.4}]
+    # P1 | 0.6 | P2 | 1.2 (new chapter) | P3 | 0.6 | P4
+    assert [p["start"] for p in data["paragraphs"]] == [0.0, 1.6, 3.8, 5.4]
+    assert [p["end"] for p in data["paragraphs"]] == [1.0, 2.6, 4.8, 6.4]
+    assert env.stub.calls == []
+    assert env.created == []
+
+
+def test_the_other_files_use_the_joined_times(env: Env) -> None:
+    files = paragraph_wavs(env)
+    assert env.align(*files, "--join").exit_code == 0
+    assert (env.out / "chapters.txt").read_text(encoding="utf-8").splitlines()[:2] == [
+        "00:00 One",
+        "00:03 Two",
+    ]
+
+
+def test_the_gaps_can_be_changed(env: Env) -> None:
+    files = paragraph_wavs(env)
+    result = env.align(*files, "--join", "--paragraph-gap", "0.1", "--chapter-gap", "0.5")
+    assert result.exit_code == 0
+    assert [p["start"] for p in env.timing()["paragraphs"]] == [0.0, 1.1, 2.6, 3.7]
+    assert wav_frames(env.out / "narration.wav")[0] == round(4.7 * 16000)
+
+
+def test_a_missing_paragraph_file_is_missing_in_the_joined_result(env: Env) -> None:
+    files = [f for f in paragraph_wavs(env) if f.stem != "P3"]
+    result = env.align(*files, "--join")
+    assert result.exit_code == 2
+    assert env.timing()["paragraphs"][2]["status"] == "missing"
+    assert wav_frames(env.out / "narration.wav")[0] == round(4.8 * 16000)
+
+
+def test_the_files_are_reported_on_the_console(env: Env, plain: Callable[[str], str]) -> None:
+    files = paragraph_wavs(env)
+    result = env.align(*files, "--join")
+    assert "Joined 4 files into" in plain(result.stderr)
+    assert "narration.wav" in plain(result.stdout)
+
+
+def test_without_join_nothing_is_joined(env: Env) -> None:
+    files = paragraph_wavs(env)
+    env.durations.update({f.name: 1.0 for f in files})
+    assert env.align(*files).exit_code == 0
+    assert not (env.out / "narration.wav").exists()
+    assert env.timing()["audio"][0]["file"] == "P1.wav"
+
+
+@pytest.mark.parametrize("option", [["--paragraph-gap", "1"], ["--chapter-gap", "1"], ["--trim"]])
+def test_the_gap_and_trim_options_need_join(
+    env: Env, plain: Callable[[str], str], option: list[str]
+) -> None:
+    files = paragraph_wavs(env)
+    result = env.align(*files, *option)
+    assert result.exit_code == 1
+    assert f"{option[0]} only works with --join" in plain(result.output)
+    assert not env.out.exists()
+
+
+def test_a_negative_gap_is_a_usage_error(env: Env) -> None:
+    assert env.align(*paragraph_wavs(env), "--join", "--paragraph-gap", "-1").exit_code == 1
+
+
+def test_join_needs_one_file_per_paragraph(env: Env, plain: Callable[[str], str]) -> None:
+    (wav,) = env.audio("all.wav")
+    result = env.align(wav, "--join")
+    assert result.exit_code == 1
+    assert "--join needs one file per paragraph" in plain(result.stderr)
+    assert env.stub.calls == [] and not env.out.exists()
+
+
+def test_files_of_different_sample_rates_stop_the_run(
+    env: Env, plain: Callable[[str], str]
+) -> None:
+    from fakes import write_silent_wav
+
+    files = paragraph_wavs(env)
+    files[2] = write_silent_wav(env.folder / "P3.wav", 1.0, 22050)
+    result = env.align(*files, "--join")
+    assert result.exit_code == 1
+    assert "P3.wav is 22050 Hz, mono, 16-bit" in plain(result.stderr)
+    assert "one format" in plain(result.stderr)
+    assert not env.out.exists()
+
+
+def test_a_file_that_is_not_a_wav_stops_the_run(env: Env, plain: Callable[[str], str]) -> None:
+    files = paragraph_wavs(env)
+    mp3 = env.folder / "P5.mp3"
+    mp3.write_bytes(b"ID3" + b"\x00" * 50)
+    script = env.script.read_text(encoding="utf-8") + "\nP5 — x\n\n> Fifth.\n"
+    env.script.write_text(script, encoding="utf-8")
+    result = env.align(*files, mp3, "--join")
+    assert result.exit_code == 1
+    assert "plain PCM WAV" in plain(result.stderr)
+
+
+def test_trim_cuts_the_silence_around_the_speech(env: Env, monkeypatch: pytest.MonkeyPatch) -> None:
+    files = paragraph_wavs(env, seconds=2.0)
+    monkeypatch.setattr("vizsync.cli.vad_speech_bounds", lambda path: (0.5, 1.5))
+    result = env.align(*files, "--join", "--trim")
+    assert result.exit_code == 0
+    # Every file keeps 0.05 s around the speech: 1.1 s each.
+    lengths = [p["end"] - p["start"] for p in env.timing()["paragraphs"]]
+    assert lengths == pytest.approx([1.1] * 4)
+    assert wav_frames(env.out / "narration.wav")[0] == round(env.timing()["total_duration"] * 16000)
+
+
+def test_trim_warns_about_a_file_without_speech(
+    env: Env, monkeypatch: pytest.MonkeyPatch, plain: Callable[[str], str]
+) -> None:
+    files = paragraph_wavs(env)
+    monkeypatch.setattr("vizsync.cli.vad_speech_bounds", lambda path: None)
+    result = env.align(*files, "--join", "--trim")
+    assert result.exit_code == 0
+    assert "P1.wav: no speech found, not trimmed." in plain(result.stderr)

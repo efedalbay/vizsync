@@ -105,7 +105,13 @@ Give vizsync whatever you have:
 - several parts in order (for example 1–2 minute takes)
 - one file per paragraph (`P08.wav`)
 
-The output is the same in every case.
+The output is the same in every case, except that with one file per paragraph the silence between the files is gone, so absolute times are not known. Add `--join` to get them: vizsync joins the files into `narration.wav` with silence between them and gives the times of that file.
+
+```
+vizsync align P*.wav --script script.md -o out --join --paragraph-gap 0.6 --chapter-gap 1.2
+```
+
+The samples are copied unchanged (nothing is encoded again), so the files must be plain PCM WAV with the same sample rate, channels and sample size. `--trim` first cuts the silence at the start and end of each file, so equal gaps sound equal.
 
 ## Installation
 
