@@ -15,9 +15,10 @@ P12 — Text of the paragraph.
 ```
 
 - Identifier: `P` followed by digits. `P12`, `P012` and `p12` are the same paragraph, reported as `P12`.
+- The identifier may be written in bold or italics: `**P12** — text`, `*P12* — text` and `__P12__ — text` are the same paragraph as `P12 — text`. The opening and closing marks must be the same (`**P12*` is not a paragraph line). The separator follows the closing mark.
 - Separator after the identifier: one of `—`, `–`, `-`, `:`, `.` surrounded by optional spaces. Both `P12 — text` and `P12: text` work.
 - Numbers must be unique. They should increase, but gaps are allowed (`P5`, `P7`). A decreasing or repeated number is an error.
-- The identifier must be at the very start of the line (no indentation).
+- The identifier (with its emphasis marks, if any) must be at the very start of the line (no indentation).
 - A line that starts with an identifier followed by a space or nothing, but has no separator (`P12 text`), is an error. Otherwise a paragraph would silently swallow it.
 - A paragraph's text continues on the following non-blank lines until the next paragraph line, a heading, a blockquote line or a blank line (see below).
 - Text that belongs to no paragraph (before the first paragraph, or after a blank line) is ignored.
