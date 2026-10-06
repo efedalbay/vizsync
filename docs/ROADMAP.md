@@ -73,7 +73,7 @@ Work proceeds one milestone at a time. A milestone is done only when every accep
 
 ## Later
 
-- Subtitle output (SRT/VTT) from word times.
+- WebVTT output next to `captions.srt` (SubRip is written since the Ledgerfall requests).
 - Word-level export in `timing.json`.
 - Number normalization ("25,000" ↔ "twenty-five thousand") for higher confidence.
 - Script tags such as `<!-- chart: valuation -->` instead of a separate chart map.

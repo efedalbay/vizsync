@@ -2,7 +2,7 @@
 
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from vizsync.asr.base import Transcriber, Word
@@ -31,6 +31,10 @@ class ParagraphResult:
     end: float | None
     confidence: float
     status: ParagraphStatus
+    text: str = ""
+    """The text that was aligned (cleaned), for captions."""
+    word_times: tuple[tuple[float, float] | None, ...] = field(default=(), compare=False)
+    """See ``ParagraphSpan.word_times``."""
 
 
 @dataclass(frozen=True)
@@ -277,6 +281,8 @@ def _assemble(
             end=span_of[paragraph.id].end,
             confidence=span_of[paragraph.id].confidence,
             status=span_of[paragraph.id].status,
+            text=paragraph.text,
+            word_times=span_of[paragraph.id].word_times,
         )
         for chapter in script.chapters
         for paragraph in chapter.paragraphs

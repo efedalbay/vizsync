@@ -15,7 +15,7 @@ A missing paragraph never gets times.
 
 import statistics
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 from vizsync.asr.base import Word
@@ -46,6 +46,9 @@ class ParagraphSpan:
     end: float | None
     confidence: float
     status: ParagraphStatus
+    word_times: tuple[tuple[float, float] | None, ...] = field(default=(), compare=False)
+    """For each normalized script word, the ``(start, end)`` of the recognized word matched to
+    it, or None if it matched none. Empty when nothing was recognized (per-paragraph files)."""
 
 
 def compute_spans(
@@ -145,9 +148,23 @@ def spans_from_alignment(
                 end=None if paragraph is None else paragraph.end,
                 confidence=paragraph_confidence(paragraph_matches[index]),
                 status=statuses[index],
+                word_times=_word_times(paragraph_matches[index], words)
+                if paragraph is not None
+                else (),
             )
         )
     return spans
+
+
+def _word_times(
+    matches: Sequence[WordMatch | None], words: Sequence[Word]
+) -> tuple[tuple[float, float] | None, ...]:
+    return tuple(
+        None
+        if match is None
+        else (words[match.recognized_index].start, words[match.recognized_index].end)
+        for match in matches
+    )
 
 
 @dataclass
