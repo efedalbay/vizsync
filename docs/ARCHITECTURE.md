@@ -85,7 +85,9 @@ vizsync/
 │   │   └── parser.py          ← Markdown → Script, collects all errors
 │   ├── audio/
 │   │   ├── inputs.py          ← expand globs/folders, natural sort, mode detection
-│   │   └── timeline.py        ← parts + offsets, durations
+│   │   ├── timeline.py        ← parts + offsets, durations
+│   │   ├── join.py            ← paragraph WAV files → one narration.wav (layout, copy, trim)
+│   │   └── speech.py          ← where speech starts and ends (voice-activity detector)
 │   ├── asr/
 │   │   ├── base.py            ← Transcriber protocol, Word model
 │   │   └── faster_whisper.py  ← real implementation
@@ -189,6 +191,7 @@ For each paragraph:
 - `inputs.py` expands folders and wildcards itself (Windows PowerShell does not), natural-sorts folder/wildcard results, detects the mode (see `docs/SPEC.md` §3).
 - `timeline.py` reads each part's duration with PyAV (already installed with faster-whisper) and computes offsets: `offset[n] = offset + sum(duration[:n]) + n × gap`.
 - In `per-paragraph` mode there is no speech recognition: spans come straight from file durations, laid end to end in script order.
+- With `--join` the spans come from a `JoinLayout` (`audio/join.py`): the sample offsets of every paragraph in the joined file, planned from the WAV headers (and, with `--trim`, from the voice-activity detector in `audio/speech.py`). Times are `offset_frames / sample_rate`, so they agree with `narration.wav` to the sample. `pipeline.plan_narration` builds the layout; `write_joined` copies the samples and adds silence (the middle value, 0x80, for 8-bit WAV) through a temporary file that is renamed on success.
 
 ## The pipeline (`pipeline.py`)
 

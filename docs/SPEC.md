@@ -96,6 +96,10 @@ Aligns the script to the audio and writes the output files.
 | `--gap` | `0` | Seconds of silence assumed between consecutive audio parts (`parts` mode) |
 | `--min-confidence` | `0.8` | Below this a paragraph is reported as `low_confidence` |
 | `--strict` | off | Exit code 1 if any warning was produced |
+| `--join` | off | Only for one file per paragraph. Also writes `narration.wav`, the files joined into one with silence between them, and gives the times of that file (see §3) |
+| `--paragraph-gap` | `0.6` | With `--join`: seconds of silence between two paragraphs of a chapter |
+| `--chapter-gap` | `1.2` | With `--join`: seconds of silence where a new chapter begins |
+| `--trim` | off | With `--join`: first cut the silence at the start and end of every file (see §3) |
 | `--formats` | `json,csv,chapters,edl` | Comma-separated list of files to write |
 | `--fps` | `30` | Frame rate of the video, used for `markers.edl`: `23.976`, `24`, `25`, `29.97`, `30`, `50`, `59.94` or `60`. Anything else is an error (exit code `1`), reported before any listening starts; ignored when `edl` is not in `--formats` |
 | `--timeline-start` | `01:00:00:00` | Timecode `HH:MM:SS:FF` where the editor's timeline starts, used for `markers.edl`. DaVinci Resolve starts new timelines at `01:00:00:00` |
@@ -125,6 +129,19 @@ Order in `parts` mode: files are sorted by natural order (`part2` before `part10
 Supported audio formats: whatever PyAV can decode (wav, mp3, m4a, flac, ogg, and others).
 
 In `per-paragraph` mode a script paragraph without a file is `missing`. A file with no matching paragraph is ignored, with a warning. Two files for one paragraph are an error. If no file matches any paragraph, that is an error too.
+
+### Joining the paragraph files (`--join`)
+
+Without `--join`, `per-paragraph` mode only reports the order and the length of each paragraph, because the silence between the files is gone and absolute times are not known. With `--join`, vizsync lays the files one after the other into `narration.wav` in the output folder, with silence between them, and the times of `timing.json` (and of every other output file) are those of that file.
+
+- The order is the order of the script. A paragraph without a file is `missing` and has no silence of its own.
+- Between two paragraphs of a chapter there is `--paragraph-gap` seconds of silence (default 0.6); where a new chapter begins, `--chapter-gap` seconds (default 1.2), measured against the last paragraph that has a file. There is no silence before the first paragraph or after the last.
+- The samples are copied unchanged: nothing is decoded, resampled or encoded again, and only silence is added. For that, only plain PCM WAV files can be joined, and all of them must have the same sample rate, channel count and sample size; otherwise the run stops with a message naming the two files and their formats, before anything is written.
+- A gap is rounded to a whole number of samples, and every time is computed from sample counts, so a time in `timing.json` is a sample position of `narration.wav`: its length is the sum of the paragraph lengths and the gaps, to the sample (`total_duration` is that length, rounded like any time).
+- `--trim` cuts the silence at the start and end of each file before joining, so the gaps sound equal even when the files carry silences of different lengths. It uses the voice-activity detector that comes with faster-whisper (no speech model is needed) and keeps 0.05 s before the first and after the last speech. Only whole samples are cut, nothing else changes. A file in which no speech is found is joined whole, with a warning (`P3.wav: no speech found, not trimmed.`).
+- `--paragraph-gap`, `--chapter-gap` and `--trim` without `--join` are errors, and so is `--join` with a recording that is not one file per paragraph. Both stop the run before anything is done. `--offset` still shifts every time but not the file.
+- `timing.json` has `mode` `per-paragraph` and one entry in `audio`: `narration.wav`.
+- The file is written to a temporary name and renamed, so a failed run never leaves a half-written `narration.wav`. An existing `narration.wav` is replaced.
 
 ## 4. Time model
 
@@ -173,7 +190,7 @@ All written to the output folder. File names are fixed.
 Details:
 
 - `mode` is `parts` or `per-paragraph` (the mode actually used, never `auto`).
-- `audio` lists the files by file name only. In `parts` mode they are in playback order; in `per-paragraph` mode, in script order. `offset` is where the file starts on the timeline, so it includes `--offset`. `total_duration` is the length of the audio (durations plus gaps) and does not include `--offset`.
+- `audio` lists the files by file name only. In `parts` mode they are in playback order; in `per-paragraph` mode, in script order, or just `narration.wav` with `--join`. `offset` is where the file starts on the timeline, so it includes `--offset`. `total_duration` is the length of the audio (durations plus gaps) and does not include `--offset`.
 - `paragraphs` are in script order and `chapters` in script order. A chapter's `first` and `last` are the identifiers of its first and last paragraph in the script, whether or not they are missing.
 - All times, `duration` and `confidence` are rounded to three decimals. In `per-paragraph` mode `confidence` is `1.0` for a paragraph with a file and `0.0` for one without.
 - The file is UTF-8 (no byte order mark), indented by two spaces, and ends with a newline.

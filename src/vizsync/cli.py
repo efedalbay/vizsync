@@ -16,6 +16,13 @@ from rich.text import Text
 from vizsync import __version__
 from vizsync.asr.faster_whisper import FasterWhisperTranscriber, download_size_mb
 from vizsync.audio.inputs import AudioMode, expand_inputs, plan_audio
+from vizsync.audio.join import (
+    DEFAULT_CHAPTER_GAP,
+    DEFAULT_PARAGRAPH_GAP,
+    JOINED_NAME,
+    write_joined,
+)
+from vizsync.audio.speech import vad_speech_bounds
 from vizsync.audio.timeline import read_duration
 from vizsync.errors import ScriptParseError, VizsyncError
 from vizsync.integrations.chartmap import load_chart_map
@@ -28,7 +35,13 @@ from vizsync.match.spans import DEFAULT_MIN_CONFIDENCE, ParagraphStatus
 from vizsync.output.edl import DEFAULT_FPS, DEFAULT_TIMELINE_START, EdlSettings
 from vizsync.output.files import FORMATS, prepare_outputs, write_outputs
 from vizsync.output.timing import read_timing_json
-from vizsync.pipeline import AlignmentResult, ParagraphResult, exit_code, run_alignment
+from vizsync.pipeline import (
+    AlignmentResult,
+    ParagraphResult,
+    exit_code,
+    plan_narration,
+    run_alignment,
+)
 from vizsync.script.models import TextMode
 from vizsync.script.parser import load_script
 from vizsync.timefmt import format_time
@@ -234,14 +247,61 @@ def align(
             "(DaVinci Resolve uses 01:00:00:00).",
         ),
     ] = DEFAULT_TIMELINE_START,
+    join: Annotated[
+        bool,
+        typer.Option(
+            "--join",
+            help="One file per paragraph: also write narration.wav, the files joined with "
+            "silence between them, and give the times of that file.",
+        ),
+    ] = False,
+    paragraph_gap: Annotated[
+        float | None,
+        typer.Option(
+            "--paragraph-gap",
+            min=0.0,
+            help=f"With --join: seconds of silence between paragraphs "
+            f"(default {DEFAULT_PARAGRAPH_GAP}).",
+            show_default=False,
+        ),
+    ] = None,
+    chapter_gap: Annotated[
+        float | None,
+        typer.Option(
+            "--chapter-gap",
+            min=0.0,
+            help=f"With --join: seconds of silence where a new chapter begins "
+            f"(default {DEFAULT_CHAPTER_GAP}).",
+            show_default=False,
+        ),
+    ] = None,
+    trim: Annotated[
+        bool,
+        typer.Option(
+            "--trim",
+            help="With --join: cut the silence at the start and end of every file first, "
+            "so equal gaps sound equal.",
+        ),
+    ] = False,
     debug: Annotated[bool, typer.Option("--debug", help="Show tracebacks for errors.")] = False,
 ) -> None:
     """Find where each paragraph of the script is in the audio and write the result files."""
+    _check_join_options(join, paragraph_gap, chapter_gap, trim)
     with _handle_errors(debug):
         chosen = _split_formats(formats)
         edl = EdlSettings.parse(fps, timeline_start) if "edl" in chosen else None
         parsed = load_script(script, text)
         plan = plan_audio(expand_inputs(audio), [p.id for p in parsed.paragraphs], mode)
+        joined = None
+        if join:
+            joined = plan_narration(
+                parsed,
+                plan,
+                target=out / JOINED_NAME,
+                paragraph_gap=DEFAULT_PARAGRAPH_GAP if paragraph_gap is None else paragraph_gap,
+                chapter_gap=DEFAULT_CHAPTER_GAP if chapter_gap is None else chapter_gap,
+                speech_bounds=vad_speech_bounds if trim else None,
+            )
         transcriber = None
         if plan.mode is AudioMode.PARTS:
             transcriber = FasterWhisperTranscriber(model, device=device.value)
@@ -259,10 +319,21 @@ def align(
                 min_confidence=min_confidence,
                 read_duration=read_duration,
                 on_progress=lambda message: status.update(escape(message)),
+                joined=joined,
             )
         outputs = prepare_outputs(result, chosen, edl)
         _report(outputs.result)
-        written = write_outputs(outputs, out, tool=f"vizsync {__version__}")
+        written = []
+        if joined is not None:
+            write_joined(joined, joined.target)
+            written.append(joined.target)
+            _print(
+                f"Joined {len(joined.entries)} files into {joined.target} "
+                f"({format_time(joined.total_seconds)})",
+                "dim",
+                error=True,
+            )
+        written += write_outputs(outputs, out, tool=f"vizsync {__version__}")
     _print("Written: " + ", ".join(str(path) for path in written), "green")
     code = exit_code(outputs.result, strict=strict)
     if code:
@@ -299,6 +370,20 @@ def durations(
         else:
             write_chart_timing(text, out)
             _print(f"Written: {out}", "green")
+
+
+def _check_join_options(
+    join: bool, paragraph_gap: float | None, chapter_gap: float | None, trim: bool
+) -> None:
+    if join:
+        return
+    for name, given in (
+        ("--paragraph-gap", paragraph_gap is not None),
+        ("--chapter-gap", chapter_gap is not None),
+        ("--trim", trim),
+    ):
+        if given:
+            raise typer.BadParameter(f"{name} only works with --join", param_hint=name)
 
 
 def _download_notice(model: str) -> str:

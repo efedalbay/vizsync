@@ -392,3 +392,105 @@ def test_paragraph_files_are_never_checked_for_pace() -> None:
         SCRIPT, "demo.md", plan, transcriber=None, read_duration=durations_of(table)
     )
     assert result.warnings == []
+
+
+# --- Joined narration -------------------------------------------------------------------------
+
+
+def joined_layout(*entries: tuple[str, int, int], warnings: list[str] | None = None):
+    """A layout at 1000 frames a second: ``(paragraph, offset frame, frames)``."""
+    from vizsync.audio.join import JoinEntry, JoinLayout, WavFormat
+
+    total = max((offset + frames for _, offset, frames in entries), default=0)
+    return JoinLayout(
+        target=Path("out/narration.wav"),
+        format=WavFormat(1, 2, 1000),
+        entries=[
+            JoinEntry(name, Path(f"{name}.wav"), 0, frames, offset)
+            for name, offset, frames in entries
+        ],
+        total_frames=total,
+        warnings=warnings or [],
+    )
+
+
+def paragraph_plan(*names: str) -> AudioPlan:
+    return plan_audio(
+        [Path(f"{name}.wav") for name in names], list(SPOKEN), AudioMode.PER_PARAGRAPH
+    )
+
+
+def run_joined(layout, *names: str, **options: float) -> AlignmentResult:
+    return run_alignment(
+        SCRIPT, "demo.md", paragraph_plan(*names), transcriber=None, joined=layout, **options
+    )
+
+
+def test_joined_paragraphs_get_the_times_of_the_joined_file() -> None:
+    layout = joined_layout(("P1", 0, 1000), ("P2", 1600, 2000), ("P4", 4800, 500))
+    result = run_joined(layout, "P1", "P2", "P4")
+    assert result.mode is AudioMode.PER_PARAGRAPH
+    times = {p.id: (p.start, p.end, p.status) for p in result.paragraphs}
+    assert times["P1"] == (0.0, 1.0, ParagraphStatus.OK)
+    assert times["P2"] == (1.6, 3.6, ParagraphStatus.OK)
+    assert times["P3"] == (None, None, ParagraphStatus.MISSING)
+    assert times["P4"] == (4.8, 5.3, ParagraphStatus.OK)
+    assert result.warnings == ["P3: no audio file."]
+
+
+def test_a_joined_result_has_one_audio_file_and_the_length_of_the_joined_file() -> None:
+    result = run_joined(joined_layout(("P1", 0, 1000), ("P2", 1600, 2000)), "P1", "P2")
+    assert result.total_duration == 3.6
+    assert [(part.file, part.offset, part.duration) for part in result.parts] == [
+        (Path("out/narration.wav"), 0.0, 3.6)
+    ]
+
+
+def test_offset_shifts_a_joined_result() -> None:
+    result = run_joined(joined_layout(("P1", 0, 1000), ("P2", 1600, 2000)), "P1", "P2", offset=2.0)
+    assert (result.paragraphs[0].start, result.paragraphs[1].end) == (2.0, 5.6)
+    assert result.total_duration == 3.6
+    assert result.parts[0].offset == 2.0
+
+
+def test_chapters_of_a_joined_result_follow_its_times() -> None:
+    layout = joined_layout(
+        ("P1", 0, 1000), ("P2", 1600, 1000), ("P3", 3800, 1000), ("P4", 5400, 1000)
+    )
+    result = run_joined(layout, "P1", "P2", "P3", "P4")
+    assert [(c.start, c.end) for c in result.chapters] == [(0.0, 2.6), (3.8, 6.4)]
+
+
+def test_trim_warnings_and_ignored_files_are_reported() -> None:
+    layout = joined_layout(("P1", 0, 1000), warnings=["P1.wav: no speech found, not trimmed."])
+    plan = plan_audio([Path("P1.wav"), Path("notes.wav")], list(SPOKEN), AudioMode.PER_PARAGRAPH)
+    result = run_alignment(SCRIPT, "demo.md", plan, transcriber=None, joined=layout)
+    assert result.warnings[:2] == [
+        "notes.wav: matches no paragraph of the script, ignored.",
+        "P1.wav: no speech found, not trimmed.",
+    ]
+
+
+def test_the_joined_narration_is_planned_from_the_script_and_the_files(tmp_path: Path) -> None:
+    from fakes import write_silent_wav
+
+    from vizsync.pipeline import plan_narration
+
+    files = [write_silent_wav(tmp_path / f"P{n}.wav", 1.0) for n in (1, 2, 3, 4)]
+    plan = plan_audio(files, list(SPOKEN), AudioMode.PER_PARAGRAPH)
+    layout = plan_narration(
+        SCRIPT, plan, target=tmp_path / "narration.wav", paragraph_gap=0.6, chapter_gap=1.2
+    )
+    rate = layout.format.frame_rate
+    # P1 | 0.6 | P2 | 1.2 (new chapter) | P3 | 0.6 | P4
+    assert [e.offset_frames / rate for e in layout.entries] == pytest.approx([0.0, 1.6, 3.8, 5.4])
+    assert layout.total_seconds == pytest.approx(6.4)
+
+
+def test_joining_needs_one_file_per_paragraph(tmp_path: Path) -> None:
+    from vizsync.errors import AudioError
+    from vizsync.pipeline import plan_narration
+
+    plan = parts_plan("all.wav")
+    with pytest.raises(AudioError, match="--join needs one file per paragraph"):
+        plan_narration(SCRIPT, plan, target=tmp_path / "n.wav", paragraph_gap=0.6, chapter_gap=1.2)
