@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from vizsync.errors import ScriptError, ScriptParseError, ScriptProblem
-from vizsync.script.models import Chapter, Paragraph, Script, TextMode
+from vizsync.script.models import Chapter, ChartTag, Paragraph, Script, TextMode
 
 _IDENTIFIER = r"(?:(?P<mark>\*\*|__|\*)[Pp](?P<marked>\d+)(?P=mark)|[Pp](?P<plain>\d+))"
 _PARAGRAPH_LINE = re.compile(rf"^{_IDENTIFIER}[ \t]*[—–\-:.][ \t]*(?P<text>.*)$")
@@ -17,6 +17,9 @@ _LEADING_NUMBER = re.compile(r"^\d+\.(?:\s+|$)")
 _TITLE_SEPARATOR = " / "
 _INTRO_TITLE = "Intro"
 
+_CHART_TAG = re.compile(r"<!--\s*chart\s*:(.*?)-->", re.IGNORECASE | re.DOTALL)
+_CHART_ID = re.compile(r"^[a-z0-9-]+$")
+_CHART_TAG_USAGE = "use <!-- chart: bet-size --> or <!-- chart: bet-size, sequence -->"
 _HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 _CITATION = re.compile(r"\[\d+\]")
 _EMPHASIS = re.compile(r"[*_`]")
@@ -94,6 +97,7 @@ class _Draft:
     inline_lines: list[str]
     quote_lines: list[str] = field(default_factory=list)
     collecting_inline: bool = True
+    charts: list[ChartTag] = field(default_factory=list)
 
     @property
     def id(self) -> str:
@@ -123,6 +127,8 @@ class _Parser:
             self._end_inline_text()
         else:
             self._add_text(line)
+        for tag in _CHART_TAG.finditer(line):
+            self._add_chart_tag(line_number, tag.group(1))
 
     def finish(self, path: Path | None) -> Script:
         self._finish_paragraph()
@@ -142,6 +148,30 @@ class _Parser:
         if self._chapter is None:
             self._chapter = self._new_chapter(_INTRO_TITLE)
         self._draft = _Draft(number, line_number, self._chapter, [first_text])
+
+    def _add_chart_tag(self, line_number: int, content: str) -> None:
+        if self._draft is None:
+            self._problem(line_number, "the chart tag is not under a paragraph")
+            return
+        parts = [part.strip() for part in content.split(",")]
+        if not parts[0] or len(parts) > 2:
+            self._problem(line_number, f"invalid chart tag ({_CHART_TAG_USAGE})")
+            return
+        chart_id = parts[0]
+        if not _CHART_ID.match(chart_id):
+            self._problem(line_number, f"chart id '{chart_id}' may only use a-z, 0-9 and '-'")
+            return
+        sequence = len(parts) == 2
+        if sequence and parts[1].lower() != "sequence":
+            self._problem(
+                line_number,
+                f"unknown chart option '{parts[1]}' (the only option is 'sequence')",
+            )
+            return
+        if any(tag.id == chart_id for tag in self._draft.charts):
+            self._problem(line_number, f"chart '{chart_id}' is tagged twice on {self._draft.id}")
+            return
+        self._draft.charts.append(ChartTag(id=chart_id, sequence=sequence, line=line_number))
 
     def _check_number(self, line_number: int, number: int) -> None:
         if number in self._first_line_of:
@@ -206,5 +236,7 @@ class _Parser:
         if not text:
             self._problem(draft.line, f"{draft.id} has no text to align (empty after cleaning)")
             return
-        paragraph = Paragraph(id=draft.id, number=draft.number, line=draft.line, text=text)
+        paragraph = Paragraph(
+            id=draft.id, number=draft.number, line=draft.line, text=text, charts=draft.charts
+        )
         draft.chapter.paragraphs.append(paragraph)

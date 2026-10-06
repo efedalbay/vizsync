@@ -42,6 +42,23 @@ P7 — Birlikte, neredeyse herkesin yaşadığı bir sorunu çözmeye koyuldular
 > Together, they set out to fix something almost everyone has lived through. [5]
 ```
 
+### Chart tags
+
+A paragraph can say which vizreel chart it is part of, with an HTML comment anywhere in the paragraph, usually on its own line below the text (see §6):
+
+```markdown
+P7 — ...
+
+> ...
+
+<!-- chart: bet-size -->
+```
+
+- `<!-- chart: ID -->` ties the paragraph to the chart `ID` (lowercase letters, digits and `-`). `<!-- chart: ID, sequence -->` also says that the chart is a sequence (one clip per paragraph). Spaces and letter case around `chart`, `:` and `,` do not matter.
+- The tag belongs to the paragraph it is under: from the paragraph line to the next paragraph line or heading, whether or not blank lines or the blockquote come in between. A paragraph may have several tags (it is then part of several charts), but not the same chart twice.
+- A tag on a heading, before the first paragraph, or after a heading and before the next paragraph is an error: `the chart tag is not under a paragraph`. So is a tag with no id or with more than one option (`invalid chart tag`), an id with a character that is not allowed, and an option other than `sequence`. All are reported with their line like any other script problem.
+- Other HTML comments are left alone. A tag is removed from the aligned text like every comment, so it never affects alignment, but a comment that merely quotes the tag syntax, for example in the header of a script, is read as a tag too.
+
 ### Text cleaning before alignment
 
 Applied to the aligned text only:
@@ -108,9 +125,9 @@ Exit codes: `0` success (warnings allowed unless `--strict`), `1` user error (ba
 
 What it prints: one line per paragraph (`P3    00:21.9 -> 00:38.0    16.1 s  ok`; a low-confidence line also shows the confidence, a missing one reads `(not found)`), then the count of `ok`, low-confidence and missing paragraphs. Warnings, progress, and in `parts` mode the audio length and the time spent on speech recognition and on matching go to standard error. The first use of a speech model prints a notice that the model is being downloaded. The output folder is created if needed. A wrong option or value is a user error with exit code `1`.
 
-### `vizsync durations TIMING_JSON --map CHART_MAP [--pad SECONDS] [-o FILE]`
+### `vizsync durations TIMING_JSON [--map CHART_MAP] [--script SCRIPT [--text quote|inline]] [--pad SECONDS] [-o FILE]`
 
-Computes chart clip timing for vizreel (see §6). Writes YAML to `-o` or prints it. `--pad` (default `0`, not negative) adds seconds to the end of a clip.
+Computes chart clip timing for vizreel (see §6). The charts come from a chart map (`--map`), from the chart tags of the script (`--script`, see §1), or from both together; at least one is needed, and a chart that is in both is an error. `--text` is needed only to parse the script (default `quote`). Writes YAML to `-o` or prints it. `--pad` (default `0`, not negative) adds seconds to the end of a clip.
 
 ## 3. Audio input modes
 
@@ -246,6 +263,10 @@ Cues:
 ## 6. Chart timing for vizreel
 
 `vizsync durations` reads `timing.json` and a chart map, and reports when each chart clip goes on the timeline and how long it must be. It is written against vizreel 0.16 (`docs/SPEC.md` there is the source of truth for `duration`, `step_duration`, `fps` and sequences). vizreel still takes chart timing from the YAML spec; CSV files in vizreel only carry a chart's data (bars, series, events), not its timing. vizreel rounds a clip to whole frames (`round(duration × fps)`), so vizsync gives times to the millisecond and leaves the rounding to vizreel.
+
+### Where the charts come from
+
+Either a chart map file (below), or the chart tags of the script (§1), or both. With tags, the paragraphs that carry the same chart id make one chart, in script order; `sequence` must be on every tag of a chart or on none, and a sequence needs 2 to 8 paragraphs. The tags of `examples/northwind-script.md` describe the same charts as `examples/chart-map.yaml`. The paragraphs of a chart must be consecutive, as for a map file. Problems in the tags are reported as `SCRIPT line N: charts.ID: message`. When both a map and a script are given, a chart that is in both is an error (`charts.ID is in both map.yaml and script.md; give each chart in one place`), and the charts of the map come first in the result. With neither charts nor tags the command stops with `No chart found`.
 
 ### Chart map
 

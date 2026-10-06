@@ -140,3 +140,64 @@ def test_the_help_lists_the_command(plain: Callable[[str], str]) -> None:
 def test_the_options_are_documented(option: str, plain: Callable[[str], str]) -> None:
     result = runner.invoke(app, ["durations", "--help"])
     assert option in plain(result.stdout)
+
+
+# --- Charts from tags in the script ----------------------------------------------------------
+
+SCRIPT = EXAMPLES / "northwind-script.md"
+
+
+def test_the_charts_can_come_from_the_tags_in_the_script() -> None:
+    result = durations(TIMING, "--script", SCRIPT)
+    assert result.exit_code == 0
+    assert result.stdout == EXPECTED
+
+
+def test_the_text_mode_of_the_script_can_be_chosen() -> None:
+    result = durations(TIMING, "--script", SCRIPT, "--text", "inline")
+    assert result.exit_code == 0
+    assert result.stdout == EXPECTED
+
+
+def test_the_map_file_and_the_script_work_together(tmp_path: Path) -> None:
+    extra = tmp_path / "extra.yaml"
+    extra.write_text("version: 1\ncharts:\n  opening:\n    paragraphs: [P1]\n", encoding="utf-8")
+    result = durations(TIMING, "--map", extra, "--script", SCRIPT)
+    assert result.exit_code == 0
+    assert result.stdout.startswith("charts:\n  opening:\n    start: 0.4\n")
+    assert "  collapse:\n" in result.stdout
+
+
+def test_a_chart_in_both_the_map_and_the_script_is_an_error(
+    plain: Callable[[str], str],
+) -> None:
+    result = durations(TIMING, "--map", CHART_MAP, "--script", SCRIPT)
+    assert result.exit_code == 1
+    err = plain(result.stderr)
+    assert "charts.collapse is in both" in err and "chart-map.yaml" in err
+
+
+def test_one_of_map_or_script_is_needed(plain: Callable[[str], str]) -> None:
+    result = durations(TIMING)
+    assert result.exit_code == 1
+    assert "--map" in plain(result.output) and "--script" in plain(result.output)
+
+
+def test_a_script_without_chart_tags_and_no_map_is_an_error(
+    tmp_path: Path, plain: Callable[[str], str]
+) -> None:
+    script = tmp_path / "plain.md"
+    script.write_text("P1 — One.\n\n> One.\n", encoding="utf-8")
+    result = durations(TIMING, "--script", script)
+    assert result.exit_code == 1
+    assert "no chart" in plain(result.stderr).lower()
+
+
+def test_a_bad_tag_in_the_script_is_reported_with_its_line(
+    tmp_path: Path, plain: Callable[[str], str]
+) -> None:
+    script = tmp_path / "bad.md"
+    script.write_text("P1 — One.\n\n> One.\n\n<!-- chart: Bad_Id -->\n", encoding="utf-8")
+    result = durations(TIMING, "--script", script)
+    assert result.exit_code == 1
+    assert "bad.md line 5: chart id 'Bad_Id' may only use a-z, 0-9 and '-'" in plain(result.stderr)

@@ -25,7 +25,7 @@ from vizsync.audio.join import (
 from vizsync.audio.speech import vad_speech_bounds
 from vizsync.audio.timeline import read_duration
 from vizsync.errors import ScriptParseError, VizsyncError
-from vizsync.integrations.chartmap import load_chart_map
+from vizsync.integrations.chartmap import collect_charts
 from vizsync.integrations.vizreel import (
     compute_chart_timing,
     format_chart_timing,
@@ -344,8 +344,24 @@ def align(
 def durations(
     timing: Annotated[Path, typer.Argument(help="timing.json written by 'vizsync align'.")],
     chart_map: Annotated[
-        Path, typer.Option("--map", help="Chart map (YAML): which paragraphs each chart covers.")
-    ],
+        Path | None,
+        typer.Option("--map", help="Chart map (YAML): which paragraphs each chart covers."),
+    ] = None,
+    script: Annotated[
+        Path | None,
+        typer.Option(
+            "--script",
+            "-s",
+            help="Script with <!-- chart: ID --> tags under its paragraphs. Used with or "
+            "instead of --map.",
+        ),
+    ] = None,
+    text: Annotated[
+        TextMode,
+        typer.Option(
+            "--text", help="How the script's text is read (see 'align'); needed to parse it."
+        ),
+    ] = TextMode.QUOTE,
     pad: Annotated[
         float,
         typer.Option(
@@ -360,15 +376,22 @@ def durations(
     debug: Annotated[bool, typer.Option("--debug", help="Show tracebacks for errors.")] = False,
 ) -> None:
     """Work out when each vizreel chart clip goes on the timeline and how long it must be."""
+    if chart_map is None and script is None:
+        raise typer.BadParameter("give --map, --script or both", param_hint="--map")
     with _handle_errors(debug):
-        result = compute_chart_timing(read_timing_json(timing), load_chart_map(chart_map), pad=pad)
-        text = format_chart_timing(result)
+        charts = collect_charts(
+            map_file=chart_map,
+            script=load_script(script, text) if script is not None else None,
+            script_file=script,
+        )
+        result = compute_chart_timing(read_timing_json(timing), charts, pad=pad)
+        yaml_text = format_chart_timing(result)
         for warning in result.warnings:
             _print(f"warning: {warning}", "yellow", error=True)
         if out is None:
-            typer.echo(text, nl=False)
+            typer.echo(yaml_text, nl=False)
         else:
-            write_chart_timing(text, out)
+            write_chart_timing(yaml_text, out)
             _print(f"Written: {out}", "green")
 
 
