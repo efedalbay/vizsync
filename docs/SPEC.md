@@ -69,6 +69,8 @@ A heading without paragraphs under it does not create a chapter, and `Intro` exi
 
 Global: `vizsync --version`, `vizsync --help`. All commands accept `--debug` (show tracebacks).
 
+Text output (paths, titles, messages) is written as UTF-8 whenever standard output or standard error is not a terminal, that is when it is redirected to a file or a pipe or captured by another program. Python would otherwise use the legacy code page of the system (cp1254 on a Turkish Windows), and a reader that expects UTF-8 would show a path such as `ledgerfall-kitaplık` as a replacement character. In a terminal the console's own encoding is used. A character the output cannot show is replaced, never an error. In Windows PowerShell 5.1, pipe vizsync into another program only after `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8`.
+
 ### `vizsync check SCRIPT [--text quote|inline]`
 
 Parses the script only. No audio, no model download. `--text` works as in `align` (default `quote`), because it decides what a valid script is (see §1).
