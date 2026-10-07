@@ -71,6 +71,23 @@ def test_the_version_is_required_and_must_be_1() -> None:
     ]
 
 
+def test_a_vizreel_spec_is_recognised_and_not_called_an_empty_map() -> None:
+    spec = (
+        "meta:\n  title: Zume\ncharts:\n"
+        "  - id: bet-size\n    type: bar\n    title: Bet size\n"
+        "  - id: history\n    type: timeline\n"
+    )
+    assert problems(spec) == [
+        "chart-map.yaml: this looks like a vizreel spec (its charts are a list), not a chart map: "
+        "give a chart map (charts as ids with their paragraphs) or tag the paragraphs of the "
+        "script with <!-- chart: ID --> and use --script"
+    ]
+
+
+def test_a_vizreel_spec_with_a_version_gets_only_the_spec_message() -> None:
+    assert len(problems("version: 2\ncharts:\n  - id: a\n    type: bar\n")) == 1
+
+
 def test_at_least_one_chart_is_required() -> None:
     assert problems("version: 1\n") == ["chart-map.yaml: charts: at least one chart is required"]
     assert problems("version: 1\ncharts: {}\n") == [

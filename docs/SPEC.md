@@ -257,7 +257,7 @@ Cues:
 - A sentence that does not fit in two lines is cut after a comma, semicolon, colon or dash when both parts keep at least a fifth of its length, otherwise as evenly as possible between words. The parts are cut again until each fits.
 - A cue lasts at most 7 s: a longer one is cut the same way, at the point nearest to its middle in time.
 - A cue starts when its first word was spoken and ends when its last was, using the times of the words the aligner matched. A script word that matched no recognized word, and every word of a paragraph that was never recognized (`per-paragraph` files, with or without `--join`), is placed between the nearest known times (or the start and end of the paragraph) in proportion to its length. The first cue of a paragraph starts at the paragraph's `start` and the last ends at its `end`.
-- A cue shorter than 1 s is lengthened up to 1 s into free time, never into the next cue. Cues never overlap: a cue is cut short where the next begins.
+- A cue shorter than 1 s is made one second long, in this order: lengthened into the free time after it (never into a cue of the next paragraph); joined to the neighbouring cue of its paragraph when the joined text still fits two lines and lasts at most 7 s (the shorter neighbour is chosen); given time from the next cue of its paragraph, which then starts later, while that cue stays at least 1 s long. The last cue of the file may run past the end of its paragraph. A cue stays shorter than a second only when none of these is possible, for example a paragraph of one short word followed at once by the next paragraph. Cues never overlap: a cue is cut short where the next begins.
 - Times include `--offset`, as everywhere else.
 
 ## 6. Chart timing for vizreel
@@ -269,6 +269,8 @@ Cues:
 Either a chart map file (below), or the chart tags of the script (§1), or both. With tags, the paragraphs that carry the same chart id make one chart, in script order; `sequence` must be on every tag of a chart or on none, and a sequence needs 2 to 8 paragraphs. The tags of `examples/northwind-script.md` describe the same charts as `examples/chart-map.yaml`. The paragraphs of a chart must be consecutive, as for a map file. Problems in the tags are reported as `SCRIPT line N: charts.ID: message`. When both a map and a script are given, a chart that is in both is an error (`charts.ID is in both map.yaml and script.md; give each chart in one place`), and the charts of the map come first in the result. With neither charts nor tags the command stops with `No chart found`.
 
 ### Chart map
+
+A vizreel spec is not a chart map: a spec lists its charts as a list (`charts:` followed by `- id: ...` items) and says how each chart looks, a chart map is a mapping from a chart id to the paragraphs it covers. A spec given as `--map` is recognised and reported as such (`this looks like a vizreel spec ... give a chart map ... or tag the paragraphs of the script`). Keep the chart map in a file of its own (for example `v01-chart-map.yaml`), or tag the script.
 
 ```yaml
 version: 1
