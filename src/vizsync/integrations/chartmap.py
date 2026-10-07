@@ -176,8 +176,15 @@ def _charts(data: Any, problems: list[str]) -> list[ChartEntry]:
     if not isinstance(data, dict):
         problems.append("the file must hold 'version' and 'charts'")
         return []
-    _check_version(data, problems)
     raw = data.get("charts")
+    if isinstance(raw, list):
+        problems.append(
+            "this looks like a vizreel spec (its charts are a list), not a chart map: give a "
+            "chart map (charts as ids with their paragraphs) or tag the paragraphs of the "
+            "script with <!-- chart: ID --> and use --script"
+        )
+        return []
+    _check_version(data, problems)
     if not isinstance(raw, dict) or not raw:
         problems.append("charts: at least one chart is required")
         return []

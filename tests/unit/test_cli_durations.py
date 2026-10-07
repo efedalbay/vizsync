@@ -201,3 +201,17 @@ def test_a_bad_tag_in_the_script_is_reported_with_its_line(
     result = durations(TIMING, "--script", script)
     assert result.exit_code == 1
     assert "bad.md line 5: chart id 'Bad_Id' may only use a-z, 0-9 and '-'" in plain(result.stderr)
+
+
+def test_a_vizreel_spec_given_as_the_map_is_explained(
+    tmp_path: Path, plain: Callable[[str], str]
+) -> None:
+    spec = tmp_path / "v01-charts.yaml"
+    spec.write_text(
+        "meta:\n  title: Zume\ncharts:\n  - id: bet-size\n    type: bar\n", encoding="utf-8"
+    )
+    result = durations(TIMING, "--map", spec)
+    assert result.exit_code == 1
+    err = plain(result.stderr)
+    assert "this looks like a vizreel spec" in err
+    assert "at least one chart is required" not in err

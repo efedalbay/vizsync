@@ -62,7 +62,7 @@ The full flow, from script to vizreel spec:
 
 1. Write the script and check it: `vizsync check northwind.md`.
 2. Record the narration and align it: `vizsync align narration.wav --script northwind.md -o out`.
-3. Say which paragraphs each chart covers. Either write a chart map (`examples/chart-map.yaml`), or tag the paragraphs in the script itself with a comment below each paragraph, `<!-- chart: valuation -->` (and `<!-- chart: collapse, sequence -->` on every paragraph of a sequence), as `examples/northwind-script.md` does. Both can be used together. The chart map:
+3. Say which paragraphs each chart covers. Either write a chart map (`examples/chart-map.yaml`), or tag the paragraphs in the script itself with a comment below each paragraph, `<!-- chart: valuation -->` (and `<!-- chart: collapse, sequence -->` on every paragraph of a sequence), as `examples/northwind-script.md` does. Both can be used together. The chart map is a file of its own, not the vizreel spec (a spec lists its charts as a list and vizsync says so if you give it as the map). The chart map:
 
    ```yaml
    version: 1

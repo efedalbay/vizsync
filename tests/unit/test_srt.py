@@ -144,9 +144,9 @@ def test_word_times_place_each_cue_where_its_words_were_spoken() -> None:
 
 def test_the_first_and_last_cue_take_the_start_and_end_of_the_paragraph() -> None:
     text = "One two. Three four."
-    words = [(1.0, 1.2), (1.3, 1.5), (2.0, 2.2), (2.3, 2.5)]
-    cues = build_captions([paragraph("P1", text, 0.8, 2.7, words)])
-    assert (cues[0].start, cues[-1].end) == (0.8, 2.7)
+    words = [(1.0, 1.2), (1.3, 1.5), (2.0, 2.2), (2.3, 2.9)]
+    cues = build_captions([paragraph("P1", text, 0.8, 3.0, words)])
+    assert (cues[0].start, cues[-1].end) == (0.8, 3.0)
 
 
 def test_unmatched_words_are_placed_between_their_neighbours() -> None:
@@ -191,12 +191,56 @@ def test_a_cue_shorter_than_a_second_is_lengthened_into_free_time() -> None:
     assert cues[0].end - cues[0].start == pytest.approx(MIN_CUE_SECONDS)
 
 
-def test_lengthening_never_runs_into_the_next_cue() -> None:
-    text = "Yes. No."
-    words = [(0.0, 0.2), (0.5, 0.7)]
-    cues = build_captions([paragraph("P1", text, 0.0, 0.7, words)])
+def test_lengthening_never_runs_into_the_next_paragraph() -> None:
+    first = paragraph("P1", "Yes.", 0.0, 0.2)
+    second = paragraph("P2", "No.", 0.5, 0.7)
+    cues = build_captions([first, second])
+    assert texts(cues) == ["Yes.", "No."]
     assert cues[0].end <= cues[1].start
     assert cues[0].end == pytest.approx(0.5)
+
+
+def test_the_last_cue_may_run_past_the_end_of_the_paragraph_to_reach_a_second() -> None:
+    (cue,) = build_captions([paragraph("P1", "Yes.", 4.0, 4.4)])
+    assert (cue.start, cue.end) == (4.0, pytest.approx(5.0))
+
+
+def test_a_short_sentence_with_no_free_time_is_joined_to_its_neighbour() -> None:
+    # Spread by length, "Short one." gets under a second and nothing is free around it.
+    text = "Short one. A much longer second sentence follows it here."
+    cues = build_captions([paragraph("P1", text, 10.0, 14.0)])
+    assert texts(cues) == ["Short one. A much longer second\nsentence follows it here."]
+    assert (cues[0].start, cues[0].end) == (10.0, 14.0)
+
+
+def test_a_short_sentence_takes_time_from_the_next_when_the_two_cannot_share_a_cue() -> None:
+    second = "The second sentence has no comma and is almost eighty characters long in total."
+    cues = build_captions([paragraph("P1", "Short one. " + second, 0.0, 7.6)])
+    assert [cue.text.replace("\n", " ") for cue in cues] == ["Short one.", second]
+    assert cues[0].end - cues[0].start == pytest.approx(MIN_CUE_SECONDS)
+    assert cues[1].start == pytest.approx(cues[0].end)
+    assert cues[1].end == pytest.approx(7.6)
+
+
+def test_a_paragraph_of_one_short_sentence_between_other_paragraphs_stays_short() -> None:
+    cues = build_captions(
+        [
+            paragraph("P1", "Before.", 0.0, 2.0),
+            paragraph("P2", "Yes.", 2.0, 2.4),
+            paragraph("P3", "After.", 2.4, 4.0),
+        ]
+    )
+    assert cues[1].end - cues[1].start == pytest.approx(0.4)
+
+
+def test_every_cue_of_a_longer_text_lasts_at_least_a_second() -> None:
+    text = (
+        "Evet. Peki ya sonra? Hayır. Bu kez farklı olacak, çünkü her şey değişti. "
+        "Tamam. Ve böylece başladılar, yavaş yavaş, adım adım ilerleyerek."
+    )
+    cues = build_captions([paragraph("P1", text, 0.0, 12.0)])
+    assert all(cue.end - cue.start >= MIN_CUE_SECONDS - 1e-9 for cue in cues)
+    assert " ".join(" ".join(c.text.split("\n")) for c in cues) == text
 
 
 def test_a_cue_over_seven_seconds_is_split_at_the_middle_word() -> None:

@@ -18,7 +18,7 @@ more cues:
 import math
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from vizsync.errors import OutputError
@@ -44,6 +44,8 @@ class Cue:
     start: float
     end: float
     text: str
+    paragraph: str = field(default="", compare=False)
+    """The paragraph the cue belongs to; cues of one paragraph may be joined or share time."""
 
 
 def build_captions(paragraphs: Sequence[ParagraphResult]) -> list[Cue]:
@@ -94,11 +96,11 @@ def _paragraph_cues(paragraph: ParagraphResult, start: float, end: float) -> lis
     tokens = paragraph.text.split()
     times = _token_times(tokens, paragraph, start, end)
     cues = [
-        Cue(times[first][0], times[last - 1][1], _lines(tokens[first:last]))
+        Cue(times[first][0], times[last - 1][1], _lines(tokens[first:last]), paragraph.id)
         for first, last in _pieces(tokens, times)
     ]
-    cues[0] = Cue(start, cues[0].end, cues[0].text)
-    cues[-1] = Cue(cues[-1].start, end, cues[-1].text)
+    cues[0] = replace(cues[0], start=start)
+    cues[-1] = replace(cues[-1], end=end)
     return cues
 
 
@@ -200,12 +202,69 @@ def _lines(tokens: Sequence[str]) -> str:
 
 
 def _tidy(cues: list[Cue]) -> list[Cue]:
-    """No overlap, and no cue shorter than a second where there is room to lengthen it."""
-    tidy: list[Cue] = []
-    for index, cue in enumerate(cues):
-        following = cues[index + 1].start if index + 1 < len(cues) else None
-        end = cue.end if following is None else min(cue.end, following)
-        if end - cue.start < MIN_CUE_SECONDS and following is not None:
-            end = min(cue.start + MIN_CUE_SECONDS, following)
-        tidy.append(Cue(cue.start, max(end, cue.start), cue.text))
-    return tidy
+    """No overlap, and no cue shorter than a second where there is a way to lengthen it.
+
+    A short cue is lengthened into the free time after it; then joined to a neighbour of its
+    paragraph if the text still fits two lines; then given time from the next cue of its
+    paragraph while that one keeps a second. The last cue may run past the end of its paragraph.
+    """
+    cues = [
+        replace(cue, end=min(cue.end, cues[index + 1].start) if index + 1 < len(cues) else cue.end)
+        for index, cue in enumerate(cues)
+    ]
+    cues = [replace(cue, end=max(cue.end, cue.start)) for cue in cues]
+    index = 0
+    while index < len(cues):
+        cue = cues[index]
+        if cue.end - cue.start >= MIN_CUE_SECONDS - _EPSILON:
+            index += 1
+            continue
+        wanted = cue.start + MIN_CUE_SECONDS
+        following = cues[index + 1] if index + 1 < len(cues) else None
+        if following is None:
+            cues[index] = replace(cue, end=wanted)
+            index += 1
+        elif following.start - cue.end > _EPSILON:
+            cues[index] = replace(cue, end=min(wanted, following.start))
+        elif (joined := _joined_with_neighbour(cues, index)) is not None:
+            first, cues[first : first + 2] = joined[0], [joined[1]]
+            index = first
+        elif (
+            _same_paragraph(cue, following) and following.end - wanted >= MIN_CUE_SECONDS - _EPSILON
+        ):
+            cues[index] = replace(cue, end=wanted)
+            cues[index + 1] = replace(following, start=wanted)
+            index += 1
+        else:
+            index += 1
+    return cues
+
+
+def _same_paragraph(first: Cue, second: Cue) -> bool:
+    return bool(first.paragraph) and first.paragraph == second.paragraph
+
+
+def _joined_with_neighbour(cues: list[Cue], index: int) -> tuple[int, Cue] | None:
+    """The short cue joined to the shorter neighbour of its paragraph, if that fits in a cue.
+
+    Returns the index of the first of the two joined cues and the joined cue.
+    """
+    options: list[tuple[float, int, Cue]] = []
+    for other in (index - 1, index + 1):
+        if not 0 <= other < len(cues) or not _same_paragraph(cues[index], cues[other]):
+            continue
+        first, second = sorted((index, other))
+        tokens = (cues[first].text + " " + cues[second].text).split()
+        duration = cues[second].end - cues[first].start
+        if _two_lines(tokens) is None or duration > MAX_CUE_SECONDS:
+            continue
+        joined = Cue(cues[first].start, cues[second].end, _lines(tokens), cues[first].paragraph)
+        other_length = cues[other].end - cues[other].start
+        options.append((other_length, first, joined))
+    if not options:
+        return None
+    _, first, joined = min(options, key=lambda option: option[0])
+    return first, joined
+
+
+_EPSILON = 1e-9
