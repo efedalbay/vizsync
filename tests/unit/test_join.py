@@ -295,3 +295,202 @@ def test_an_unwritable_output_is_an_error(tmp_path: Path) -> None:
     (tmp_path / "out").write_text("I am a file", encoding="utf-8")
     with pytest.raises(OutputError, match="Cannot"):
         write_joined(layout, layout.target)
+
+
+# --- MP3 files ------------------------------------------------------------------------------------
+
+import math  # noqa: E402
+import struct  # noqa: E402
+
+import av  # noqa: E402
+
+from vizsync.audio.join import read_audio_info  # noqa: E402
+
+
+def _encoder_available(name: str) -> bool:
+    try:
+        av.codec.Codec(name, "w")
+    except Exception:
+        return False
+    return True
+
+
+needs_mp3 = pytest.mark.skipif(
+    not _encoder_available("libmp3lame"), reason="this PyAV has no MP3 encoder"
+)
+
+
+def write_compressed(
+    path: Path,
+    seconds: float,
+    *,
+    codec: str,
+    rate: int = 44100,
+    channels: int = 1,
+    freq: float = 440,
+) -> Path:
+    """Encode a generated tone (no recording) with ``codec`` into ``path``."""
+    layout = "mono" if channels == 1 else "stereo"
+    count = round(seconds * rate)
+    samples = [int(8000 * math.sin(2 * math.pi * freq * i / rate)) for i in range(count)]
+    interleaved = [value for value in samples for _ in range(channels)]
+    frame = av.AudioFrame(format="s16", layout=layout, samples=count)
+    frame.planes[0].update(struct.pack(f"<{len(interleaved)}h", *interleaved))
+    frame.sample_rate = rate
+    with av.open(str(path), "w") as container:
+        stream = container.add_stream(codec, rate=rate)
+        stream.layout = layout
+        for packet in stream.encode(frame):
+            container.mux(packet)
+        for packet in stream.encode(None):
+            container.mux(packet)
+    return path
+
+
+def write_mp3(path: Path, seconds: float, **options) -> Path:
+    return write_compressed(path, seconds, codec="libmp3lame", **options)
+
+
+def decoded(path: Path) -> bytes:
+    """What any player decodes from an MP3: 16-bit samples, the file's own rate and layout."""
+    chunks: list[bytes] = []
+    with av.open(str(path)) as container:
+        stream = container.streams.audio[0]
+        layout = stream.layout.name
+        resampler = av.AudioResampler(
+            format="s16", layout=layout, rate=stream.codec_context.sample_rate
+        )
+        size = 2 * len(stream.layout.channels)
+        for frame in container.decode(audio=0):
+            for converted in resampler.resample(frame):
+                chunks.append(bytes(converted.planes[0])[: converted.samples * size])
+        for converted in resampler.resample(None):
+            chunks.append(bytes(converted.planes[0])[: converted.samples * size])
+    return b"".join(chunks)
+
+
+@needs_mp3
+def test_an_mp3_is_read_as_16_bit_with_its_own_rate_and_channels(tmp_path: Path) -> None:
+    mono = write_mp3(tmp_path / "a.mp3", 1.0)
+    stereo = write_mp3(tmp_path / "b.mp3", 0.5, rate=48000, channels=2)
+    mono_format, mono_frames, mono_compressed = read_audio_info(mono)
+    assert mono_format == WavFormat(1, 2, 44100) and mono_compressed
+    assert mono_frames * 2 == len(decoded(mono))
+    assert read_audio_info(stereo)[0] == WavFormat(2, 2, 48000)
+
+
+def test_a_wav_is_not_marked_as_compressed(tmp_path: Path) -> None:
+    assert read_audio_info(write_wav(tmp_path / "a.wav", 10))[2] is False
+
+
+@needs_mp3
+def test_mp3_files_are_decoded_once_and_nothing_else_changes(tmp_path: Path) -> None:
+    files = {
+        "P1": write_mp3(tmp_path / "P1.mp3", 1.0, freq=300),
+        "P2": write_mp3(tmp_path / "P2.mp3", 0.7, freq=500),
+    }
+    layout = plan_join(
+        [("P1", 0), ("P2", 1)],
+        files,
+        target=tmp_path / "out" / "narration.wav",
+        paragraph_gap=0.6,
+        chapter_gap=1.2,
+    )
+    write_joined(layout, layout.target)
+    first, second = layout.entries
+    assert first.compressed and second.compressed
+    rate = layout.format.frame_rate
+    assert second.offset_frames == first.frames + round(1.2 * rate)
+    data = frames_of(layout.target)
+    assert len(data) == layout.total_frames * 2
+    assert data[: first.frames * 2] == decoded(files["P1"])[: first.frames * 2]
+    start = second.offset_frames * 2
+    assert data[start : start + second.frames * 2] == decoded(files["P2"])[: second.frames * 2]
+    gap = data[first.frames * 2 : start]
+    assert gap == bytes(len(gap))
+    assert layout.total_frames == read_wav_info(layout.target)[1]
+
+
+@needs_mp3
+def test_mp3_and_wav_files_can_be_mixed_when_their_formats_agree(tmp_path: Path) -> None:
+    files = {
+        "P1": write_mp3(tmp_path / "P1.mp3", 0.5),
+        "P2": write_wav(tmp_path / "P2.wav", 400, rate=44100),
+    }
+    layout = plan_join(
+        [("P1", 0), ("P2", 0)],
+        files,
+        target=tmp_path / "n.wav",
+        paragraph_gap=0.0,
+        chapter_gap=0.0,
+    )
+    write_joined(layout, layout.target)
+    assert [e.compressed for e in layout.entries] == [True, False]
+    assert frames_of(layout.target)[-400 * 2 :] == frames_of(tmp_path / "P2.wav")
+
+
+@needs_mp3
+def test_an_mp3_trimmed_keeps_exactly_the_decoded_samples_of_the_range(tmp_path: Path) -> None:
+    path = write_mp3(tmp_path / "P1.mp3", 1.0)
+    layout = plan_join(
+        [("P1", 0)],
+        {"P1": path},
+        target=tmp_path / "n.wav",
+        paragraph_gap=0.0,
+        chapter_gap=0.0,
+        speech_bounds=lambda p: (0.2, 0.6),
+    )
+    write_joined(layout, layout.target)
+    entry = layout.entries[0]
+    assert (entry.first_frame, entry.last_frame) == (6615, 28665)  # 0.15 s and 0.65 s
+    assert frames_of(layout.target) == decoded(path)[entry.first_frame * 2 : entry.last_frame * 2]
+
+
+@needs_mp3
+def test_an_mp3_and_a_wav_of_another_rate_are_an_error_naming_both(tmp_path: Path) -> None:
+    files = {
+        "P1": write_mp3(tmp_path / "P1.mp3", 0.5),
+        "P2": write_wav(tmp_path / "P2.wav", 100, rate=48000),
+    }
+    with pytest.raises(AudioError) as caught:
+        plan_join(
+            [("P1", 0), ("P2", 0)],
+            files,
+            target=tmp_path / "n.wav",
+            paragraph_gap=0.6,
+            chapter_gap=1.2,
+        )
+    message = str(caught.value)
+    assert "P2.wav is 48000 Hz, mono, 16-bit" in message
+    assert "P1.mp3 is 44100 Hz, mono, 16-bit" in message
+
+
+@needs_mp3
+def test_mp3_files_of_different_channel_counts_are_an_error(tmp_path: Path) -> None:
+    files = {
+        "P1": write_mp3(tmp_path / "P1.mp3", 0.5),
+        "P2": write_mp3(tmp_path / "P2.mp3", 0.5, channels=2),
+    }
+    with pytest.raises(AudioError, match="P2.mp3 is 44100 Hz, 2 channels, 16-bit"):
+        plan_join(
+            [("P1", 0), ("P2", 0)],
+            files,
+            target=tmp_path / "n.wav",
+            paragraph_gap=0.6,
+            chapter_gap=1.2,
+        )
+
+
+def test_a_broken_mp3_is_an_error_that_says_what_can_be_joined(tmp_path: Path) -> None:
+    path = tmp_path / "P1.mp3"
+    path.write_bytes(b"ID3\x04\x00\x00" + b"\x00" * 200)
+    with pytest.raises(AudioError, match="plain PCM WAV or MP3") as caught:
+        read_audio_info(path)
+    assert caught.value.path == path
+
+
+@pytest.mark.skipif(not _encoder_available("aac"), reason="this PyAV has no AAC encoder")
+def test_another_compressed_format_is_still_refused(tmp_path: Path) -> None:
+    path = write_compressed(tmp_path / "P1.m4a", 0.5, codec="aac")
+    with pytest.raises(AudioError, match="plain PCM WAV or MP3"):
+        read_audio_info(path)

@@ -86,7 +86,7 @@ vizsync/
 │   ├── audio/
 │   │   ├── inputs.py          ← expand globs/folders, natural sort, mode detection
 │   │   ├── timeline.py        ← parts + offsets, durations
-│   │   ├── join.py            ← paragraph WAV files → one narration.wav (layout, copy, trim)
+│   │   ├── join.py            ← paragraph WAV (or MP3, decoded) files → one narration.wav (layout, copy, trim)
 │   │   └── speech.py          ← where speech starts and ends (voice-activity detector)
 │   ├── asr/
 │   │   ├── base.py            ← Transcriber protocol, Word model
