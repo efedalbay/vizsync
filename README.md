@@ -17,10 +17,18 @@ Because the script is known, vizsync does not need a perfect transcript. Speech 
 ```
 $ vizsync align narration.wav --script northwind.md -o out/
 
-P1     00:00.4 ->  00:09.8     9.4 s  ok
-P2     00:10.6 ->  00:21.1    10.5 s  ok
-P3     00:21.9 ->  00:38.0    16.1 s  ok
+P1     00:00.0 ->  00:03.6     3.5 s  ok
+P2     00:05.7 ->  00:07.5     1.8 s  ok
+P3     00:09.7 ->  00:13.0     3.3 s  ok
+P4     00:15.2 ->  00:17.4     2.3 s  ok
+P5     00:19.6 ->  00:21.6     1.9 s  ok
+P6     00:23.7 ->  00:26.4     2.7 s  ok
+P7     00:28.7 ->  00:30.9     2.2 s  ok
+P8     00:33.0 ->  00:36.1     3.1 s  ok
+8 ok, 0 low confidence, 0 missing
 ```
+
+(The output of the Northwind example in this repository: `examples/northwind-script.md` and the 38-second clip `tests/fixtures/northwind.wav`.)
 
 Written to `out/`:
 
@@ -36,7 +44,7 @@ With a small map file, vizsync also works out when each chart clip goes on the t
 
 ## Script format
 
-Paragraphs are numbered. Headings become chapters. The text to align is either the line itself or the blockquote under it (useful for bilingual scripts). Full rules in `docs/SPEC.md`.
+Paragraphs are numbered. Headings become chapters. The text to align is either the line itself or the blockquote under it (useful for bilingual scripts). Full rules in [SPEC.md](https://github.com/efedalbay/vizsync/blob/main/docs/SPEC.md).
 
 ```markdown
 ## 1. The Hook
@@ -62,7 +70,7 @@ The full flow, from script to vizreel spec:
 
 1. Write the script and check it: `vizsync check northwind.md`.
 2. Record the narration and align it: `vizsync align narration.wav --script northwind.md -o out`.
-3. Say which paragraphs each chart covers. Either write a chart map (`examples/chart-map.yaml`), or tag the paragraphs in the script itself with a comment below each paragraph, `<!-- chart: valuation -->` (and `<!-- chart: collapse, sequence -->` on every paragraph of a sequence), as `examples/northwind-script.md` does. Both can be used together. The chart map is a file of its own, not the vizreel spec (a spec lists its charts as a list and vizsync says so if you give it as the map). The chart map:
+3. Say which paragraphs each chart covers. Either write a chart map ([`examples/chart-map.yaml`](https://github.com/efedalbay/vizsync/blob/main/examples/chart-map.yaml)), or tag the paragraphs in the script itself with a comment below each paragraph, `<!-- chart: valuation -->` (and `<!-- chart: collapse, sequence -->` on every paragraph of a sequence), as [`examples/northwind-script.md`](https://github.com/efedalbay/vizsync/blob/main/examples/northwind-script.md) does. Both can be used together. The chart map is a file of its own, not the vizreel spec (a spec lists its charts as a list and vizsync says so if you give it as the map). The chart map:
 
    ```yaml
    version: 1
@@ -134,9 +142,10 @@ When it is released: `pip install vizsync`.
 
 ## Documents
 
-- `docs/SPEC.md` — script format, commands, output files
-- `docs/ARCHITECTURE.md` — how it works and why
-- `docs/ROADMAP.md` — milestones
+- [SPEC.md](https://github.com/efedalbay/vizsync/blob/main/docs/SPEC.md): script format, commands, output files
+- [ARCHITECTURE.md](https://github.com/efedalbay/vizsync/blob/main/docs/ARCHITECTURE.md): how it works and why
+- [ROADMAP.md](https://github.com/efedalbay/vizsync/blob/main/docs/ROADMAP.md): milestones
+- [CHANGELOG.md](https://github.com/efedalbay/vizsync/blob/main/CHANGELOG.md): what changed in each version
 
 ## License
 

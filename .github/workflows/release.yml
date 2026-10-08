@@ -1,0 +1,191 @@
+name: Release
+
+# Pushing a tag vX.Y.Z publishes that version to PyPI and creates a GitHub release.
+# Running the workflow by hand publishes the current main branch to TestPyPI, as a rehearsal.
+# Both use trusted publishing: PyPI accepts a short-lived token from GitHub, no secrets needed.
+#
+# Before anything is published, the built wheel is installed into a clean environment on Ubuntu
+# and Windows and used. After the publish to PyPI, the released version is installed from PyPI
+# the same way and aligns the example clip with a real speech model.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+
+      - name: Read the package version
+        id: version
+        run: |
+          version=$(uv run --no-project python -c "import re; print(re.search(r'__version__ = \"(.+?)\"', open('src/vizsync/__init__.py').read()).group(1))")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check that the tag matches the package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          if [ "v${{ steps.version.outputs.version }}" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match version ${{ steps.version.outputs.version }} in src/vizsync/__init__.py"
+            exit 1
+          fi
+
+      - name: Build the wheel and the source distribution
+        run: uv build
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+
+  smoke-wheel:
+    name: wheel on ${{ matrix.os }}
+    needs: build
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Install the wheel into a clean environment
+        run: |
+          python -m venv "$RUNNER_TEMP/clean"
+          if [ -d "$RUNNER_TEMP/clean/Scripts" ]; then py="$RUNNER_TEMP/clean/Scripts/python"; else py="$RUNNER_TEMP/clean/bin/python"; fi
+          echo "PY=$py" >> "$GITHUB_ENV"
+          "$py" -m pip install dist/*.whl
+
+      - name: Use it
+        run: |
+          "$PY" -m vizsync --version
+          "$PY" -m vizsync check examples/northwind-script.md
+          "$PY" -m vizsync durations examples/timing.example.json --map examples/chart-map.yaml
+          "$PY" -m vizsync durations examples/timing.example.json --script examples/northwind-script.md
+
+  publish-testpypi:
+    if: github.event_name == 'workflow_dispatch'
+    needs: smoke-wheel
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/vizsync/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: smoke-wheel
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/vizsync/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  smoke-pypi:
+    name: PyPI on ${{ matrix.os }}
+    needs: [build, publish-pypi]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install the released version from PyPI into a clean environment
+        run: |
+          python -m venv "$RUNNER_TEMP/clean"
+          if [ -d "$RUNNER_TEMP/clean/Scripts" ]; then py="$RUNNER_TEMP/clean/Scripts/python"; else py="$RUNNER_TEMP/clean/bin/python"; fi
+          echo "PY=$py" >> "$GITHUB_ENV"
+          # The index can take a minute to list a new release.
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if "$py" -m pip install "vizsync==${{ needs.build.outputs.version }}"; then exit 0; fi
+            echo "Attempt $attempt failed; waiting for the index"
+            sleep 20
+          done
+          exit 1
+
+      - name: Align the example clip with a real speech model
+        run: |
+          "$PY" -m vizsync --version
+          "$PY" -m vizsync align tests/fixtures/northwind.wav --script examples/northwind-script.md --model base.en --formats json --out "$RUNNER_TEMP/out" | tee "$RUNNER_TEMP/align.txt"
+          grep -q "8 ok, 0 low confidence, 0 missing" "$RUNNER_TEMP/align.txt"
+
+  github-release:
+    needs: publish-pypi
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+
+      - name: Create the GitHub release from the changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v heading="## [$version]" '
+            index($0, heading) == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "CHANGELOG.md has no section for $version"
+            exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" dist/* --title "vizsync $version" --notes-file notes.md
