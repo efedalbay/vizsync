@@ -26,7 +26,11 @@ class ChartTag(BaseModel):
 
 
 class Paragraph(BaseModel):
-    """One numbered paragraph. ``text`` is the cleaned text used for alignment."""
+    """One numbered paragraph. ``text`` is the cleaned text used for alignment.
+
+    ``pause_after`` is the seconds of silence a ``<!-- pause: SECONDS -->`` tag asks for after this
+    paragraph when the paragraph files are joined, or None.
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -35,6 +39,7 @@ class Paragraph(BaseModel):
     line: int
     text: str
     charts: list[ChartTag] = []
+    pause_after: float | None = None
 
 
 class Chapter(BaseModel):

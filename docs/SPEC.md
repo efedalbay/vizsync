@@ -59,6 +59,24 @@ P7 — ...
 - A tag on a heading, before the first paragraph, or after a heading and before the next paragraph is an error: `the chart tag is not under a paragraph`. So is a tag with no id or with more than one option (`invalid chart tag`), an id with a character that is not allowed, and an option other than `sequence`. All are reported with their line like any other script problem.
 - Other HTML comments are left alone. A tag is removed from the aligned text like every comment, so it never affects alignment, but a comment that merely quotes the tag syntax, for example in the header of a script, is read as a tag too.
 
+### Pause tags
+
+A paragraph can ask for a longer silence after it when the paragraph files are joined (`--join`, §3), for example where an intro is added to the video later:
+
+```markdown
+P5 — ...
+
+> ...
+
+<!-- pause: 4.0 -->
+```
+
+- `<!-- pause: SECONDS -->` makes the silence between this paragraph and the next one `SECONDS` seconds long. It replaces the paragraph gap or chapter gap that would be there, it is not added to it, and it may be shorter than that gap. `SECONDS` is a positive decimal number written with digits and an optional `.` (`4`, `4.0`, `0.25`); `4 s`, `1,5`, `0`, a negative number or a missing value are errors. Spaces and letter case around `pause` and `:` do not matter.
+- The tag belongs to the paragraph it is under, with the same rule as a chart tag (from the paragraph line to the next paragraph line or heading). A paragraph has at most one pause tag. It can have chart tags as well.
+- Without `--join` the tag is ignored: a recording of the whole narration already has its silences, and the files of a recording without `--join` are laid end to end.
+- Errors, reported with their line like any other script problem: `the pause tag is not under a paragraph`, `invalid pause tag (use <!-- pause: 4.0 --> with the seconds as a positive number)`, `P5 has two pause tags (first at line 12)`, and `P34 is the last paragraph, no paragraph follows its pause`.
+- A comment that merely quotes the tag syntax, for example in the header of a script, is read as a tag, as with chart tags.
+
 ### Text cleaning before alignment
 
 Applied to the aligned text only:
@@ -153,6 +171,7 @@ Without `--join`, `per-paragraph` mode only reports the order and the length of 
 
 - The order is the order of the script. A paragraph without a file is `missing` and has no silence of its own.
 - Between two paragraphs of a chapter there is `--paragraph-gap` seconds of silence (default 0.6); where a new chapter begins, `--chapter-gap` seconds (default 1.2), measured against the last paragraph that has a file. There is no silence before the first paragraph or after the last.
+- A `<!-- pause: SECONDS -->` tag (§1) on a paragraph replaces the silence after it by `SECONDS` seconds, whether that would have been the paragraph gap or the chapter gap. Everything that follows is later by the difference, and every time of every output file includes it, since they are the times of `narration.wav`. The silence is measured from the end of the paragraph as it is joined, so with `--trim` it starts at the end of the kept speech. A pause that cannot be used is dropped with a warning: `P5: pause of 4.0 s ignored, the paragraph has no audio file.` (`P5` has no file; the gap after the paragraphs that have files stays as it was) or `P5: pause of 4.0 s ignored, no audio file follows it.` (`P5` is the last paragraph that has a file; there is no silence after the last).
 - The samples of a plain PCM WAV file are copied unchanged: nothing is resampled or encoded again, and only silence is added. An MP3 file (text-to-speech services such as ElevenLabs give MP3) is decoded once to 16-bit PCM at its own sample rate and channel count, and those samples are written, so no second lossy generation is made; the MP3 file itself is not touched. Other compressed formats (M4A, Ogg, ...) and other kinds of WAV (float, 24-bit, extensible) are refused with a message that says to convert them. WAV and MP3 files can be mixed. All files must have the same sample rate, channel count and sample size once decoded (an MP3 is always 16-bit); otherwise the run stops with a message naming the two files and their formats, before anything is written. Sample rates and channel counts are never converted.
 - A gap is rounded to a whole number of samples, and every time is computed from sample counts (for an MP3, the number of samples it decodes to), so a time in `timing.json` is a sample position of `narration.wav`: its length is the sum of the paragraph lengths and the gaps, to the sample (`total_duration` is that length, rounded like any time).
 - `--trim` cuts the silence at the start and end of each file before joining, so the gaps sound equal even when the files carry silences of different lengths. It uses the voice-activity detector that comes with faster-whisper (no speech model is needed) and keeps 0.05 s before the first and after the last speech. Only whole samples are cut, nothing else changes. A file in which no speech is found is joined whole, with a warning (`P3.wav: no speech found, not trimmed.`).
@@ -333,7 +352,7 @@ vizsync never edits a vizreel spec file itself, because rewriting YAML with a st
 
 ## 7. Warnings
 
-Each warning is a short sentence with the identifier. Examples: `P17: low confidence (0.62). The narration may differ from the script.`, `P23: not found in the audio.` (`parts` mode) or `P23: no audio file.` (`per-paragraph` mode), `notes.wav: matches no paragraph of the script, ignored.`, `P4: 730.8 s for 12 words, much longer than the other paragraphs. The script may be read more than once or out of order.` (`parts` mode: a found paragraph whose seconds per word exceed 3 times the median of all found paragraphs, at least 5 s long, needs 3 or more found paragraphs; its status stays `ok`), `chapters: only 2 chapters, YouTube needs at least 3.` Warnings are printed and stored in `timing.json`.
+Each warning is a short sentence with the identifier. Examples: `P17: low confidence (0.62). The narration may differ from the script.`, `P5: pause of 4.0 s ignored, the paragraph has no audio file.` (`--join`, §3), `P23: not found in the audio.` (`parts` mode) or `P23: no audio file.` (`per-paragraph` mode), `notes.wav: matches no paragraph of the script, ignored.`, `P4: 730.8 s for 12 words, much longer than the other paragraphs. The script may be read more than once or out of order.` (`parts` mode: a found paragraph whose seconds per word exceed 3 times the median of all found paragraphs, at least 5 s long, needs 3 or more found paragraphs; its status stays `ok`), `chapters: only 2 chapters, YouTube needs at least 3.` Warnings are printed and stored in `timing.json`.
 
 ## 8. Errors
 

@@ -514,6 +514,68 @@ def test_the_gaps_can_be_changed(env: Env) -> None:
     assert wav_frames(env.out / "narration.wav")[0] == round(4.7 * 16000)
 
 
+def paused_script(env: Env, seconds: str = "4.0") -> None:
+    env.script.write_text(
+        SCRIPT_TEXT.replace("P1 — x", f"P1 — x\n<!-- pause: {seconds} -->"), encoding="utf-8"
+    )
+
+
+def test_a_pause_tag_moves_every_later_time_in_every_output_file(env: Env) -> None:
+    paused_script(env)
+    result = env.align(*paragraph_wavs(env), "--join")
+    assert result.exit_code == 0
+    # P1 | 4.0 | P2 | 1.2 (new chapter) | P3 | 0.6 | P4
+    assert [p["start"] for p in env.timing()["paragraphs"]] == [0.0, 5.0, 7.2, 8.8]
+    assert wav_frames(env.out / "narration.wav")[0] == round(9.8 * 16000)
+    assert (env.out / "chapters.txt").read_text(encoding="utf-8").splitlines()[:2] == [
+        "00:00 One",
+        "00:07 Two",
+    ]
+    assert "01:00:05:00" in (env.out / "markers.edl").read_text(encoding="utf-8")
+    cues = (env.out / "captions.srt").read_text(encoding="utf-8")
+    assert "00:00:05,000 -->" in cues
+
+
+def test_the_durations_of_a_paused_narration_start_after_the_pause(
+    env: Env, tmp_path: Path
+) -> None:
+    paused_script(env)
+    env.script.write_text(
+        env.script.read_text(encoding="utf-8").replace("P2 — x", "P2 — x\n<!-- chart: growth -->"),
+        encoding="utf-8",
+    )
+    assert env.align(*paragraph_wavs(env), "--join").exit_code == 0
+    result = runner.invoke(
+        app, ["durations", str(env.out / "timing.json"), "--script", str(env.script)]
+    )
+    assert result.exit_code == 0, result.output
+    assert "start: 5" in result.stdout
+
+
+def test_without_join_a_pause_tag_changes_nothing(env: Env) -> None:
+    paused_script(env)
+    result = env.align(*paragraph_wavs(env), "--mode", "per-paragraph")
+    assert result.exit_code == 0
+    assert [p["start"] for p in env.timing()["paragraphs"]] == [0.0, 40.0, 80.0, 120.0]
+    assert not (env.out / "narration.wav").exists()
+
+
+def test_a_pause_that_cannot_be_used_is_a_warning(env: Env) -> None:
+    paused_script(env)
+    files = [f for f in paragraph_wavs(env) if f.name != "P1.wav"]
+    result = env.align(*files, "--join")
+    assert result.exit_code == 2
+    assert "P1: pause of 4.0 s ignored, the paragraph has no audio file." in result.output
+
+
+def test_a_bad_pause_tag_stops_the_run_with_its_line(env: Env) -> None:
+    paused_script(env, "soon")
+    result = env.align(*paragraph_wavs(env), "--join")
+    assert result.exit_code == 1
+    assert "invalid pause tag" in result.output
+    assert not (env.out / "narration.wav").exists()
+
+
 def test_a_missing_paragraph_file_is_missing_in_the_joined_result(env: Env) -> None:
     files = [f for f in paragraph_wavs(env) if f.stem != "P3"]
     result = env.align(*files, "--join")

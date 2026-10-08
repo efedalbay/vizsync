@@ -10,8 +10,7 @@ from vizsync.pipeline import AlignmentResult, exit_code, run_alignment
 from vizsync.script.models import TextMode
 from vizsync.script.parser import parse_script
 
-SCRIPT = parse_script(
-    """\
+SCRIPT_TEXT = """\
 ## 1. Bir / 1. One
 
 P1 — x
@@ -31,9 +30,8 @@ P3 — x
 P4 — x
 
 > Then the biggest customer left.
-""",
-    TextMode.QUOTE,
-)
+"""
+SCRIPT = parse_script(SCRIPT_TEXT, TextMode.QUOTE)
 SPOKEN = {
     "P1": "Northwind opened its first office in 2016",
     "P2": "The team grew quickly after that",
@@ -485,6 +483,24 @@ def test_the_joined_narration_is_planned_from_the_script_and_the_files(tmp_path:
     # P1 | 0.6 | P2 | 1.2 (new chapter) | P3 | 0.6 | P4
     assert [e.offset_frames / rate for e in layout.entries] == pytest.approx([0.0, 1.6, 3.8, 5.4])
     assert layout.total_seconds == pytest.approx(6.4)
+
+
+def test_a_pause_tag_of_the_script_sets_the_silence_after_its_paragraph(tmp_path: Path) -> None:
+    from fakes import write_silent_wav
+
+    from vizsync.pipeline import plan_narration
+
+    tagged = parse_script(
+        SCRIPT_TEXT.replace("P2 — x", "P2 — x\n<!-- pause: 4.0 -->"), TextMode.QUOTE
+    )
+    files = [write_silent_wav(tmp_path / f"P{n}.wav", 1.0) for n in (1, 2, 3, 4)]
+    plan = plan_audio(files, list(SPOKEN), AudioMode.PER_PARAGRAPH)
+    layout = plan_narration(
+        tagged, plan, target=tmp_path / "narration.wav", paragraph_gap=0.6, chapter_gap=1.2
+    )
+    rate = layout.format.frame_rate
+    # P1 | 0.6 | P2 | 4.0 instead of the chapter gap 1.2 | P3 | 0.6 | P4
+    assert [e.offset_frames / rate for e in layout.entries] == pytest.approx([0.0, 1.6, 6.6, 8.2])
 
 
 def join_error(plan: AudioPlan, tmp_path: Path) -> str:
