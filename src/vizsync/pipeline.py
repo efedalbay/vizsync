@@ -223,6 +223,7 @@ def plan_narration(
         paragraph_gap=paragraph_gap,
         chapter_gap=chapter_gap,
         speech_bounds=speech_bounds,
+        pauses={p.id: p.pause_after for p in script.paragraphs if p.pause_after is not None},
     )
 
 

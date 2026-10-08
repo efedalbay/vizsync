@@ -131,6 +131,69 @@ def test_a_gap_of_zero_lays_the_files_end_to_end(tmp_path: Path) -> None:
     assert layout.total_frames == 30
 
 
+def test_a_pause_replaces_the_gap_after_its_paragraph(tmp_path: Path) -> None:
+    layout = layout_of(
+        tmp_path,
+        {"P1": 1000, "P2": 2000, "P3": 500},
+        {"P1": 0, "P2": 0, "P3": 1},
+        pauses={"P1": 4.0},
+    )
+    assert [e.offset_frames for e in layout.entries] == [0, 1000 + 4000, 5000 + 2000 + 1200]
+
+
+def test_a_pause_also_replaces_the_chapter_gap(tmp_path: Path) -> None:
+    layout = layout_of(tmp_path, {"P1": 100, "P2": 100}, {"P1": 0, "P2": 1}, pauses={"P1": 0.3})
+    assert layout.entries[1].offset_frames == 100 + 300
+
+
+def test_a_pause_can_be_shorter_than_the_normal_gap(tmp_path: Path) -> None:
+    layout = layout_of(tmp_path, {"P1": 100, "P2": 100}, {"P1": 0, "P2": 0}, pauses={"P1": 0.1})
+    assert layout.entries[1].offset_frames == 100 + 100
+
+
+def test_a_pause_is_rounded_to_whole_frames_like_a_gap(tmp_path: Path) -> None:
+    layout = layout_of(
+        tmp_path, {"P1": 441, "P2": 441}, {"P1": 0, "P2": 0}, rate=44100, pauses={"P1": 4.0}
+    )
+    assert layout.entries[1].offset_frames == 441 + 176400
+
+
+def test_a_pause_counts_after_the_trim(tmp_path: Path) -> None:
+    layout = layout_of(
+        tmp_path,
+        {"P1": 1000, "P2": 1000},
+        {"P1": 0, "P2": 0},
+        pauses={"P1": 4.0},
+        speech_bounds=lambda path: (0.2, 0.8),
+    )
+    first, second = layout.entries
+    assert (first.first_frame, first.last_frame) == (150, 850)
+    assert second.offset_frames == 700 + 4000
+
+
+def test_a_pause_after_a_missing_paragraph_is_dropped_with_a_warning(tmp_path: Path) -> None:
+    layout = layout_of(
+        tmp_path,
+        {"P1": 100, "P3": 100},
+        {"P1": 0, "P2": 0, "P3": 0},
+        pauses={"P2": 4.0},
+    )
+    assert [e.offset_frames for e in layout.entries] == [0, 100 + 600]
+    assert layout.warnings == ["P2: pause of 4.0 s ignored, the paragraph has no audio file."]
+
+
+def test_a_pause_after_the_last_file_adds_no_silence_and_warns(tmp_path: Path) -> None:
+    layout = layout_of(tmp_path, {"P1": 100, "P2": 100}, {"P1": 0, "P2": 0}, pauses={"P2": 4.0})
+    assert layout.total_frames == 100 + 600 + 100
+    assert layout.warnings == ["P2: pause of 4.0 s ignored, no audio file follows it."]
+
+
+def test_a_pause_of_a_paragraph_that_is_not_in_the_script_is_ignored(tmp_path: Path) -> None:
+    layout = layout_of(tmp_path, {"P1": 100, "P2": 100}, {"P1": 0, "P2": 0}, pauses={"P9": 4.0})
+    assert layout.entries[1].offset_frames == 100 + 600
+    assert layout.warnings == []
+
+
 def test_the_order_is_the_order_of_the_script_not_of_the_files(tmp_path: Path) -> None:
     files = {
         "P2": write_wav(tmp_path / "b.wav", 100),

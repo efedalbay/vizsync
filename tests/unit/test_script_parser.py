@@ -504,3 +504,79 @@ def test_the_same_chart_twice_on_a_paragraph_is_an_error() -> None:
 def test_every_chart_tag_problem_is_reported_with_the_other_problems() -> None:
     text = "P1 — One.\n<!-- chart: A -->\n\nP1 — Again.\n<!-- chart: b, x -->\n"
     assert [line for line, _ in problems_of(text, TextMode.INLINE)] == [2, 4, 5]
+
+
+# --- Pause tags (`<!-- pause: 4.0 -->`) -------------------------------------------------------
+
+
+def pauses_of(text: str, mode: TextMode = TextMode.INLINE) -> list[float | None]:
+    return [p.pause_after for p in parse(text, mode).paragraphs]
+
+
+def test_a_paragraph_without_a_pause_tag_has_no_pause() -> None:
+    assert pauses_of("P1 — One.\n\nP2 — Two.\n") == [None, None]
+
+
+def test_a_pause_tag_below_a_paragraph_belongs_to_it() -> None:
+    text = "P1 — One.\n<!-- pause: 4.0 -->\n\nP2 — Two.\n"
+    assert pauses_of(text) == [4.0, None]
+
+
+def test_a_pause_tag_after_the_blockquote_still_belongs_to_the_paragraph() -> None:
+    text = "P1 — Bir.\n\n> One.\n\n<!-- pause: 4 -->\n\nP2 — İki.\n\n> Two.\n"
+    assert pauses_of(text, TextMode.QUOTE) == [4.0, None]
+
+
+def test_the_spelling_of_the_pause_tag_is_free_and_decimals_are_read() -> None:
+    assert pauses_of("P1 — One.\n<!--PAUSE:0.25-->\n\nP2 — Two.\n") == [0.25, None]
+
+
+def test_a_pause_tag_is_not_part_of_the_aligned_text() -> None:
+    text = "P1 — One <!-- pause: 4.0 --> two.\n\nP2 — Three.\n"
+    assert parse(text, TextMode.INLINE).paragraphs[0].text == "One two."
+
+
+def test_a_pause_tag_and_a_chart_tag_can_be_on_the_same_paragraph() -> None:
+    text = "P1 — One.\n<!-- chart: a -->\n<!-- pause: 2 -->\n\nP2 — Two.\n"
+    paragraph = parse(text, TextMode.INLINE).paragraphs[0]
+    assert paragraph.pause_after == 2.0
+    assert [tag.id for tag in paragraph.charts] == ["a"]
+
+
+def test_a_comment_that_only_starts_like_pause_is_left_alone() -> None:
+    assert pauses_of("P1 — One. <!-- pausebutton: yes -->\n\nP2 — Two.\n") == [None, None]
+
+
+def test_a_pause_tag_on_a_heading_or_before_any_paragraph_is_an_error() -> None:
+    text = "<!-- pause: 1 -->\n\n## 1. Bir\n\n<!-- pause: 1 -->\n\nP1 — One.\n\nP2 — Two.\n"
+    assert problems_of(text, TextMode.INLINE) == [
+        (1, "the pause tag is not under a paragraph"),
+        (5, "the pause tag is not under a paragraph"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "content", ["", "abc", "-1", "0", "4 s", "1,5", "1.", "1e3", "nan", "inf", "1; 2"]
+)
+def test_a_pause_that_is_not_a_positive_number_is_an_error(content: str) -> None:
+    text = f"P1 — One.\n<!-- pause: {content} -->\n\nP2 — Two.\n"
+    assert problems_of(text, TextMode.INLINE) == [
+        (2, "invalid pause tag (use <!-- pause: 4.0 --> with the seconds as a positive number)")
+    ]
+
+
+def test_two_pause_tags_on_one_paragraph_are_an_error() -> None:
+    text = "P1 — One.\n<!-- pause: 1 -->\n<!-- pause: 2 -->\n\nP2 — Two.\n"
+    assert problems_of(text, TextMode.INLINE) == [(3, "P1 has two pause tags (first at line 2)")]
+
+
+def test_a_pause_after_the_last_paragraph_is_an_error() -> None:
+    text = "P1 — One.\n\nP2 — Two.\n<!-- pause: 4 -->\n"
+    assert problems_of(text, TextMode.INLINE) == [
+        (4, "P2 is the last paragraph, no paragraph follows its pause")
+    ]
+
+
+def test_a_pause_tag_does_not_hide_other_problems() -> None:
+    text = "P1 — One.\n<!-- pause: -1 -->\n\nP2 — Two.\n<!-- chart: Bad_Id -->\n"
+    assert [line for line, _ in problems_of(text, TextMode.INLINE)] == [2, 5]

@@ -197,6 +197,7 @@ def plan_join(
     paragraph_gap: float,
     chapter_gap: float,
     speech_bounds: SpeechBounds | None = None,
+    pauses: Mapping[str, float] | None = None,
 ) -> JoinLayout:
     """Work out where each paragraph file goes. Reads the headers of the files, never the samples.
 
@@ -208,6 +209,8 @@ def plan_join(
         chapter_gap: Seconds of silence where a new chapter begins.
         speech_bounds: When given, the silence at the start and end of each file is cut away
             (keeping ``TRIM_PAD_SECONDS``) using the speech this finds.
+        pauses: Seconds of silence after a paragraph (by identifier), instead of the paragraph
+            or chapter gap that would follow it. One that cannot be used is left out with a warning.
 
     Raises:
         AudioError: If a file cannot be read, is not a plain PCM WAV, differs in format from the
@@ -221,6 +224,8 @@ def plan_join(
     warnings: list[str] = []
     position = 0
     previous_chapter: int | None = None
+    previous_name: str | None = None
+    pending = dict(pauses or {})
     for name, chapter, path, _, frames, compressed in infos:
         if path.resolve() == target.resolve():
             raise AudioError("This file would be overwritten by the joined narration", path=path)
@@ -233,11 +238,30 @@ def plan_join(
                 first, last = trim_range(frames, rate, bounds, TRIM_PAD_SECONDS)
         if previous_chapter is not None:
             gap = chapter_gap if chapter != previous_chapter else paragraph_gap
+            if previous_name in pending:
+                gap = pending.pop(previous_name)
             position += round(gap * rate)
         entries.append(JoinEntry(name, path, first, last, position, compressed))
         position += last - first
         previous_chapter = chapter
+        previous_name = name
+    warnings.extend(_unused_pause_warnings(paragraphs, pending, previous_name))
     return JoinLayout(target, shared or WavFormat(1, 2, 1), entries, position, warnings)
+
+
+def _unused_pause_warnings(
+    paragraphs: Sequence[tuple[str, int]], pending: Mapping[str, float], last_name: str | None
+) -> list[str]:
+    known = {name for name, _ in paragraphs}
+    warnings = []
+    for name, seconds in pending.items():
+        if name not in known:
+            continue
+        reason = (
+            "no audio file follows it" if name == last_name else "the paragraph has no audio file"
+        )
+        warnings.append(f"{name}: pause of {seconds} s ignored, {reason}.")
+    return warnings
 
 
 def write_joined(layout: JoinLayout, target: Path) -> None:

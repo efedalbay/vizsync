@@ -124,6 +124,8 @@ vizsync align P*.wav --script script.md -o out --join --paragraph-gap 0.6 --chap
 
 The samples of WAV files are copied unchanged (nothing is encoded again). MP3 files, which some text-to-speech services give (ElevenLabs, for example), are decoded once to 16-bit PCM and joined the same way; the MP3 files themselves are left as they are. All files must have the same sample rate, channel count and sample size, so a WAV joined with MP3 files must be 16-bit. vizsync never converts a sample rate or a channel count.
 
+To leave room for something added later, such as an intro, put `<!-- pause: 4.0 -->` under a paragraph: the silence after it is then 4.0 seconds instead of the normal gap, and every time and output file includes it.
+
 ## Installation
 
 Not on PyPI yet. From a clone of this repository, with [uv](https://docs.astral.sh/uv/):

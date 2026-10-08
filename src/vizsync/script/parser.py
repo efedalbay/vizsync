@@ -20,6 +20,9 @@ _INTRO_TITLE = "Intro"
 _CHART_TAG = re.compile(r"<!--\s*chart\s*:(.*?)-->", re.IGNORECASE | re.DOTALL)
 _CHART_ID = re.compile(r"^[a-z0-9-]+$")
 _CHART_TAG_USAGE = "use <!-- chart: bet-size --> or <!-- chart: bet-size, sequence -->"
+_PAUSE_TAG = re.compile(r"<!--\s*pause\s*:(.*?)-->", re.IGNORECASE | re.DOTALL)
+_PAUSE_SECONDS = re.compile(r"^\d+(?:\.\d+)?$")
+_PAUSE_TAG_USAGE = "use <!-- pause: 4.0 --> with the seconds as a positive number"
 _HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 _CITATION = re.compile(r"\[\d+\]")
 _EMPHASIS = re.compile(r"[*_`]")
@@ -98,6 +101,8 @@ class _Draft:
     quote_lines: list[str] = field(default_factory=list)
     collecting_inline: bool = True
     charts: list[ChartTag] = field(default_factory=list)
+    pause: float | None = None
+    pause_line: int = 0
 
     @property
     def id(self) -> str:
@@ -113,6 +118,8 @@ class _Parser:
         self._draft: _Draft | None = None
         self._first_line_of: dict[int, int] = {}
         self._last_number: int | None = None
+        self._last_pause_line: int | None = None
+        self._last_paragraph_id = ""
 
     def feed(self, line_number: int, line: str) -> None:
         if match := _PARAGRAPH_LINE.match(line):
@@ -129,11 +136,18 @@ class _Parser:
             self._add_text(line)
         for tag in _CHART_TAG.finditer(line):
             self._add_chart_tag(line_number, tag.group(1))
+        for tag in _PAUSE_TAG.finditer(line):
+            self._add_pause_tag(line_number, tag.group(1))
 
     def finish(self, path: Path | None) -> Script:
         self._finish_paragraph()
         if not self._first_line_of:
             self._problem(None, "no paragraphs found")
+        if self._last_pause_line is not None:
+            self._problem(
+                self._last_pause_line,
+                f"{self._last_paragraph_id} is the last paragraph, no paragraph follows its pause",
+            )
         if self._problems:
             raise ScriptParseError(self._problems, path=path)
         chapters = [Chapter(title=c.title, paragraphs=c.paragraphs) for c in self._chapters]
@@ -172,6 +186,23 @@ class _Parser:
             self._problem(line_number, f"chart '{chart_id}' is tagged twice on {self._draft.id}")
             return
         self._draft.charts.append(ChartTag(id=chart_id, sequence=sequence, line=line_number))
+
+    def _add_pause_tag(self, line_number: int, content: str) -> None:
+        if self._draft is None:
+            self._problem(line_number, "the pause tag is not under a paragraph")
+            return
+        seconds = content.strip()
+        if not _PAUSE_SECONDS.match(seconds) or float(seconds) <= 0:
+            self._problem(line_number, f"invalid pause tag ({_PAUSE_TAG_USAGE})")
+            return
+        if self._draft.pause is not None:
+            self._problem(
+                line_number,
+                f"{self._draft.id} has two pause tags (first at line {self._draft.pause_line})",
+            )
+            return
+        self._draft.pause = float(seconds)
+        self._draft.pause_line = line_number
 
     def _check_number(self, line_number: int, number: int) -> None:
         if number in self._first_line_of:
@@ -237,6 +268,13 @@ class _Parser:
             self._problem(draft.line, f"{draft.id} has no text to align (empty after cleaning)")
             return
         paragraph = Paragraph(
-            id=draft.id, number=draft.number, line=draft.line, text=text, charts=draft.charts
+            id=draft.id,
+            number=draft.number,
+            line=draft.line,
+            text=text,
+            charts=draft.charts,
+            pause_after=draft.pause,
         )
         draft.chapter.paragraphs.append(paragraph)
+        self._last_paragraph_id = draft.id
+        self._last_pause_line = draft.pause_line if draft.pause is not None else None
