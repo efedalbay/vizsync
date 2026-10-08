@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from vizsync.asr.base import Transcriber, Word
-from vizsync.audio.inputs import AudioMode, AudioPlan
+from vizsync.audio.inputs import AudioMode, AudioPlan, paragraph_id_in_name
 from vizsync.audio.join import JoinLayout, SpeechBounds, plan_join
 from vizsync.audio.timeline import Part, build_timeline, read_duration, total_duration
 from vizsync.errors import AudioError
@@ -210,10 +210,7 @@ def plan_narration(
         AudioError: If the recording is not one file per paragraph, or the files cannot be joined.
     """
     if plan.mode is not AudioMode.PER_PARAGRAPH:
-        raise AudioError(
-            "--join needs one file per paragraph (P01.wav, P02.wav, ...), but these files "
-            "are one recording, or parts of one"
-        )
+        raise AudioError(_join_needs_paragraph_files(script, plan))
     paragraphs = [
         (paragraph.id, number)
         for number, chapter in enumerate(script.chapters)
@@ -226,6 +223,23 @@ def plan_narration(
         paragraph_gap=paragraph_gap,
         chapter_gap=chapter_gap,
         speech_bounds=speech_bounds,
+    )
+
+
+def _join_needs_paragraph_files(script: Script, plan: AudioPlan) -> str:
+    known = {paragraph.id for paragraph in script.paragraphs}
+    unmatched = [path.name for path in plan.files if paragraph_id_in_name(path) not in known]
+    if not unmatched:
+        return (
+            "--join needs one file per paragraph, but these files are read as parts of one "
+            "recording (--mode parts)."
+        )
+    one = len(unmatched) == 1
+    return (
+        f"--join needs one file per paragraph, named like {script.paragraphs[0].id}.wav, but "
+        f"{', '.join(unmatched)} {'matches' if one else 'match'} no paragraph of the script. "
+        f"Rename {'it' if one else 'them'}, or pass --mode per-paragraph to ignore "
+        f"{'it' if one else 'them'}."
     )
 
 

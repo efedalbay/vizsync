@@ -89,8 +89,11 @@ def plan_audio(
     known = set(paragraph_ids)
     mode = requested
     if mode is AudioMode.AUTO:
-        every_name_known = all(paragraph_id_in_name(path) in known for path in files)
-        mode = AudioMode.PER_PARAGRAPH if files and every_name_known else AudioMode.PARTS
+        mode = (
+            AudioMode.PER_PARAGRAPH
+            if _looks_like_paragraph_files(files, known)
+            else AudioMode.PARTS
+        )
     if mode is AudioMode.PARTS:
         return AudioPlan(AudioMode.PARTS, files, {}, [])
     by_paragraph, ignored = _assign_to_paragraphs(files, known)
@@ -101,6 +104,15 @@ def plan_audio(
         )
     ordered = {pid: by_paragraph[pid] for pid in paragraph_ids if pid in by_paragraph}
     return AudioPlan(AudioMode.PER_PARAGRAPH, files, ordered, ignored)
+
+
+def _looks_like_paragraph_files(files: Sequence[Path], known: set[str]) -> bool:
+    """One file per paragraph: most names hold an identifier of the script, or all hold one."""
+    if not files:
+        return False
+    matching = sum(paragraph_id_in_name(path) in known for path in files)
+    numbered = sum(paragraph_id_in_name(path) is not None for path in files)
+    return matching > 0 and (matching * 2 > len(files) or numbered == len(files))
 
 
 def _assign_to_paragraphs(

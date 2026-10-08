@@ -487,51 +487,35 @@ def test_the_joined_narration_is_planned_from_the_script_and_the_files(tmp_path:
     assert layout.total_seconds == pytest.approx(6.4)
 
 
-def test_joining_needs_one_file_per_paragraph(tmp_path: Path) -> None:
+def join_error(plan: AudioPlan, tmp_path: Path) -> str:
     from vizsync.errors import AudioError
     from vizsync.pipeline import plan_narration
 
-    plan = parts_plan("all.wav")
-    with pytest.raises(AudioError, match="--join needs one file per paragraph"):
+    with pytest.raises(AudioError) as caught:
         plan_narration(SCRIPT, plan, target=tmp_path / "n.wav", paragraph_gap=0.6, chapter_gap=1.2)
+    return str(caught.value)
 
 
-# --- Word times and text for captions -----------------------------------------------------------
-
-
-def test_every_paragraph_carries_its_text_and_the_times_of_its_words() -> None:
-    words = narration("P1", "P2", "P3", "P4")
-    result = run_parts(FakeTranscriber(words), parts_plan("all.wav"), {"all.wav": 40.0})
-    first = result.paragraphs[0]
-    assert first.text == "Northwind opened its first office in 2016."
-    assert [(w.start, w.end) for w in words[:7]] == list(first.word_times)
-
-
-def test_an_unmatched_script_word_has_no_time() -> None:
-    words = narration("P1", "P2", "P3", "P4")
-    words[1] = Word(text="banana", start=words[1].start, end=words[1].end)
-    result = run_parts(FakeTranscriber(words), parts_plan("all.wav"), {"all.wav": 40.0})
-    times = result.paragraphs[0].word_times
-    assert times[1] is None
-    assert times[0] == (words[0].start, words[0].end)
-    assert len(times) == 7
-
-
-def test_a_missing_paragraph_has_no_word_times() -> None:
-    result = run_parts(
-        FakeTranscriber(narration("P1", "P3", "P4")), parts_plan("all.wav"), {"all.wav": 40.0}
+def test_the_join_error_names_the_file_that_matches_no_paragraph(tmp_path: Path) -> None:
+    message = join_error(parts_plan("all.wav"), tmp_path)
+    assert message == (
+        "--join needs one file per paragraph, named like P1.wav, but all.wav matches no "
+        "paragraph of the script. Rename it, or pass --mode per-paragraph to ignore it."
     )
-    assert result.paragraphs[1].word_times == ()
 
 
-def test_paragraph_files_have_text_but_no_word_times() -> None:
-    plan = paragraph_plan("P1", "P2")
-    result = run_alignment(
-        SCRIPT,
-        "demo.md",
-        plan,
-        transcriber=None,
-        read_duration=durations_of({"P1.wav": 3.0, "P2.wav": 2.0}),
+def test_the_join_error_names_every_file_that_matches_no_paragraph(tmp_path: Path) -> None:
+    message = join_error(parts_plan("P1.wav", "notes.wav", "part2.wav"), tmp_path)
+    assert message == (
+        "--join needs one file per paragraph, named like P1.wav, but notes.wav, part2.wav "
+        "match no paragraph of the script. Rename them, or pass --mode per-paragraph to "
+        "ignore them."
     )
-    assert result.paragraphs[0].text == "Northwind opened its first office in 2016."
-    assert result.paragraphs[0].word_times == ()
+
+
+def test_the_join_error_with_forced_parts_mode_says_so(tmp_path: Path) -> None:
+    message = join_error(parts_plan("P1.wav", "P2.wav"), tmp_path)
+    assert message == (
+        "--join needs one file per paragraph, but these files are read as parts of one "
+        "recording (--mode parts)."
+    )

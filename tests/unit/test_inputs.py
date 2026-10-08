@@ -153,7 +153,8 @@ def test_auto_picks_per_paragraph_when_every_name_has_a_known_identifier() -> No
     [
         [Path("part1.wav"), Path("part2.wav")],
         [Path("P1.wav"), Path("part2.wav")],
-        [Path("P1.wav"), Path("P9.wav")],
+        [Path("P1.wav"), Path("notes.wav")],
+        [Path("P1.wav"), Path("notes.wav"), Path("part2.wav")],
         [Path("narration.wav")],
     ],
 )
@@ -162,6 +163,35 @@ def test_auto_falls_back_to_parts(files: list[Path]) -> None:
     assert plan.mode is AudioMode.PARTS
     assert plan.paragraph_files == {}
     assert plan.ignored == []
+
+
+def test_auto_ignores_a_file_that_matches_no_paragraph_when_most_files_match() -> None:
+    files = [Path(f"P{n}.mp3") for n in (1, 2, 3)] + [Path("notes.mp3")]
+    plan = plan_audio(files, IDS, AudioMode.AUTO)
+    assert plan.mode is AudioMode.PER_PARAGRAPH
+    assert list(plan.paragraph_files) == ["P1", "P2", "P3"]
+    assert [path.name for path in plan.ignored] == ["notes.mp3"]
+
+
+def test_auto_ignores_a_file_numbered_beyond_the_script() -> None:
+    files = [Path(f"P{n:02d}.mp3") for n in (1, 2, 3, 10)]
+    plan = plan_audio(files, IDS, AudioMode.AUTO)
+    assert plan.mode is AudioMode.PER_PARAGRAPH
+    assert [path.name for path in plan.ignored] == ["P10.mp3"]
+
+
+def test_auto_takes_a_few_files_with_paragraph_numbers_as_per_paragraph_too() -> None:
+    plan = plan_audio([Path("P1.wav"), Path("P9.wav")], IDS, AudioMode.AUTO)
+    assert plan.mode is AudioMode.PER_PARAGRAPH
+    assert list(plan.paragraph_files) == ["P1"]
+    assert [path.name for path in plan.ignored] == ["P9.wav"]
+
+
+def test_auto_does_not_take_half_matching_files_without_paragraph_numbers_as_per_paragraph() -> (
+    None
+):
+    plan = plan_audio([Path("P1.wav"), Path("part2.wav")], IDS, AudioMode.AUTO)
+    assert plan.mode is AudioMode.PARTS
 
 
 def test_explicit_parts_ignores_identifiers_in_names() -> None:
