@@ -731,3 +731,48 @@ def test_an_mp3_and_a_wav_of_another_rate_stop_the_run(
     assert "P2.wav is 22050 Hz, mono, 16-bit" in plain(result.stderr)
     assert "P1.mp3 is 44100 Hz, mono, 16-bit" in plain(result.stderr)
     assert not env.out.exists()
+
+
+# --- A file in the folder that matches no paragraph -----------------------------------------
+
+
+def test_join_ignores_a_file_numbered_beyond_the_script_with_a_warning(
+    env: Env, plain: Callable[[str], str]
+) -> None:
+    from fakes import write_silent_wav
+
+    files = paragraph_wavs(env)
+    files.append(write_silent_wav(env.folder / "P10.wav", 1.0))
+    result = env.align(*files, "--join")
+    assert result.exit_code == 0
+    assert "P10.wav: matches no paragraph of the script, ignored." in plain(result.stderr)
+    assert env.timing()["mode"] == "per-paragraph"
+    assert wav_frames(env.out / "narration.wav")[0] == round(6.4 * 16000)
+
+
+def test_join_ignores_a_file_without_a_paragraph_number_when_most_files_match(
+    env: Env, plain: Callable[[str], str]
+) -> None:
+    from fakes import write_silent_wav
+
+    files = paragraph_wavs(env)
+    files.append(write_silent_wav(env.folder / "notes.wav", 1.0))
+    result = env.align(*files, "--join")
+    assert result.exit_code == 0
+    assert "notes.wav: matches no paragraph of the script, ignored." in plain(result.stderr)
+
+
+def test_the_join_error_names_the_files_that_match_no_paragraph(
+    env: Env, plain: Callable[[str], str]
+) -> None:
+    from fakes import write_silent_wav
+
+    files = [
+        write_silent_wav(env.folder / "P1.wav", 1.0),
+        write_silent_wav(env.folder / "intro.wav", 1.0),
+    ]
+    result = env.align(*files, "--join")
+    assert result.exit_code == 1
+    err = plain(result.stderr)
+    assert "intro.wav matches no paragraph of the script" in err
+    assert "--mode per-paragraph" in err
