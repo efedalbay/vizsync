@@ -114,7 +114,7 @@ The output is the same in every case, except that with one file per paragraph th
 vizsync align P*.wav --script script.md -o out --join --paragraph-gap 0.6 --chapter-gap 1.2
 ```
 
-The samples are copied unchanged (nothing is encoded again), so the files must be plain PCM WAV with the same sample rate, channels and sample size. `--trim` first cuts the silence at the start and end of each file, so equal gaps sound equal.
+The samples of WAV files are copied unchanged (nothing is encoded again). MP3 files, which some text-to-speech services give (ElevenLabs, for example), are decoded once to 16-bit PCM and joined the same way; the MP3 files themselves are left as they are. All files must have the same sample rate, channel count and sample size, so a WAV joined with MP3 files must be 16-bit. vizsync never converts a sample rate or a channel count.
 
 ## Installation
 

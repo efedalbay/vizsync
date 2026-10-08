@@ -672,3 +672,62 @@ def test_captions_of_a_joined_narration_use_the_joined_times(env: Env) -> None:
         "00:00:03,800",
         "00:00:05,400",
     ]
+
+
+# --- Joining MP3 files ---------------------------------------------------------------------------
+
+
+def paragraph_mp3s(env: Env, seconds: float = 1.0) -> list[Path]:
+    from test_join import write_mp3
+
+    return [write_mp3(env.folder / f"P{n}.mp3", seconds) for n in (1, 2, 3, 4)]
+
+
+def mp3_available() -> bool:
+    from test_join import _encoder_available
+
+    return _encoder_available("libmp3lame")
+
+
+def test_mp3_files_are_joined_into_a_wav_with_matching_times(env: Env) -> None:
+    if not mp3_available():
+        pytest.skip("this PyAV has no MP3 encoder")
+    files = paragraph_mp3s(env)
+    result = env.align(*files, "--join")
+    assert result.exit_code == 0
+    frames, rate = wav_frames(env.out / "narration.wav")
+    assert rate == 44100
+    data = env.timing()
+    assert data["total_duration"] == pytest.approx(frames / rate, abs=0.001)
+    assert data["audio"][0]["file"] == "narration.wav"
+    starts = [p["start"] for p in data["paragraphs"]]
+    ends = [p["end"] for p in data["paragraphs"]]
+    # Each paragraph is the decoded length of its file; the gaps are those of --join.
+    assert starts[0] == 0.0
+    assert starts[1] - ends[0] == pytest.approx(0.6, abs=0.001)
+    assert starts[2] - ends[1] == pytest.approx(1.2, abs=0.001)
+    assert starts[3] - ends[2] == pytest.approx(0.6, abs=0.001)
+    assert env.stub.calls == []
+
+
+def test_mp3_files_without_join_are_not_joined(env: Env) -> None:
+    if not mp3_available():
+        pytest.skip("this PyAV has no MP3 encoder")
+    files = paragraph_mp3s(env)
+    env.durations.update({f.name: 1.0 for f in files})
+    assert env.align(*files).exit_code == 0
+    assert not (env.out / "narration.wav").exists()
+
+
+def test_an_mp3_and_a_wav_of_another_rate_stop_the_run(
+    env: Env, plain: Callable[[str], str]
+) -> None:
+    if not mp3_available():
+        pytest.skip("this PyAV has no MP3 encoder")
+    files = paragraph_mp3s(env)
+    files[1] = paragraph_wavs(env, rate=22050)[1]
+    result = env.align(*files, "--join")
+    assert result.exit_code == 1
+    assert "P2.wav is 22050 Hz, mono, 16-bit" in plain(result.stderr)
+    assert "P1.mp3 is 44100 Hz, mono, 16-bit" in plain(result.stderr)
+    assert not env.out.exists()

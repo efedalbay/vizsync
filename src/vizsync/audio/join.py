@@ -5,10 +5,12 @@ that the times in ``timing.json`` match that track exactly, the files are laid o
 with a silence between them: a short one between paragraphs and a longer one where a new chapter
 begins.
 
-The samples are copied unchanged: nothing is decoded, resampled or encoded again. Only silence is
-added, and optionally the silence at the start and end of each file is cut away, in whole samples.
-Only plain PCM WAV files can be joined this way, and all of them must have the same sample rate,
-channel count and sample size. Gaps are rounded to whole samples, and every time is computed from
+The samples are copied unchanged: nothing is resampled or encoded again. Only silence is added, and
+optionally the silence at the start and end of each file is cut away, in whole samples. Plain PCM
+WAV files are copied as they are. An MP3 file is decoded once to 16-bit PCM at its own sample
+rate and channel count and the result is what is written, so no second lossy generation is made;
+the file itself is not touched. All files must have the same sample rate, channel count and
+sample size once decoded. Gaps are rounded to whole samples, and every time is computed from
 the sample counts, so the times and the file agree to the sample.
 """
 
@@ -16,7 +18,7 @@ import contextlib
 import math
 import os
 import wave
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Generator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -63,6 +65,8 @@ class JoinEntry:
     first_frame: int
     last_frame: int
     offset_frames: int
+    compressed: bool = False
+    """True for an MP3 file, which is decoded when it is copied (frames count decoded samples)."""
 
     @property
     def frames(self) -> int:
@@ -86,6 +90,13 @@ class JoinLayout:
         return self.total_frames / self.format.frame_rate
 
 
+_NOT_JOINABLE = (
+    "Joining needs plain PCM WAV or MP3 files; convert this one first "
+    "(for example with 'uv run python scripts/to-wav.py INPUT OUTPUT.wav')"
+)
+_MP3_CODECS = ("mp3", "mp3float")
+
+
 def read_wav_info(path: Path) -> tuple[WavFormat, int]:
     """Return the format and the number of frames of a PCM WAV file.
 
@@ -97,13 +108,72 @@ def read_wav_info(path: Path) -> tuple[WavFormat, int]:
             info = WavFormat(wav.getnchannels(), wav.getsampwidth(), wav.getframerate())
             return info, wav.getnframes()
     except (wave.Error, EOFError):
-        raise AudioError(
-            "Joining needs plain PCM WAV files; convert this one first "
-            "(for example with 'uv run python scripts/to-wav.py INPUT OUTPUT.wav')",
-            path=path,
-        ) from None
+        raise AudioError(_NOT_JOINABLE, path=path) from None
     except OSError as error:
         raise AudioError(f"Cannot read the file ({error.strerror})", path=path) from None
+
+
+def read_audio_info(path: Path) -> tuple[WavFormat, int, bool]:
+    """Return the format and the number of frames of a WAV or MP3 file, and whether it is an MP3.
+
+    For an MP3 the format is that of its decoded 16-bit samples and the frames are counted by
+    decoding the file.
+
+    Raises:
+        AudioError: If the file cannot be read or is neither a plain PCM WAV nor an MP3.
+    """
+    try:
+        info, frames = read_wav_info(path)
+    except AudioError as error:
+        if error.message != _NOT_JOINABLE:
+            raise
+        mp3_format, frames = _mp3_info(path)
+        return mp3_format, frames, True
+    return info, frames, False
+
+
+def _mp3_info(path: Path) -> tuple[WavFormat, int]:
+    chunks, info = _decode_mp3(path)
+    size = info.sample_width * info.channels
+    return info, sum(len(chunk) for chunk in chunks) // size
+
+
+def _decode_mp3(path: Path) -> tuple[Generator[bytes, None, None], WavFormat]:
+    """Decode an MP3 to 16-bit PCM at its own rate and layout: the format and the sample chunks.
+
+    The chunks are produced while they are read; the file is open until they are used up.
+    """
+    import av
+
+    try:
+        container = av.open(str(path))
+    except (av.error.FFmpegError, OSError, ValueError):
+        raise AudioError(_NOT_JOINABLE, path=path) from None
+    try:
+        streams = container.streams.audio
+        if not streams or streams[0].codec_context.name not in _MP3_CODECS:
+            raise AudioError(_NOT_JOINABLE, path=path)
+        stream = streams[0]
+        info = WavFormat(len(stream.layout.channels), 2, stream.codec_context.sample_rate)
+    except BaseException:
+        container.close()
+        raise
+
+    def chunks() -> Generator[bytes, None, None]:
+        size = info.sample_width * info.channels
+        resampler = av.AudioResampler(format="s16", layout=stream.layout.name, rate=info.frame_rate)
+        try:
+            for frame in container.decode(stream):
+                for converted in resampler.resample(frame):
+                    yield bytes(converted.planes[0])[: converted.samples * size]
+            for converted in resampler.resample(None):
+                yield bytes(converted.planes[0])[: converted.samples * size]
+        except (av.error.FFmpegError, ValueError):
+            raise AudioError(_NOT_JOINABLE, path=path) from None
+        finally:
+            container.close()
+
+    return chunks(), info
 
 
 def trim_range(
@@ -144,14 +214,14 @@ def plan_join(
             first one, or is the file to be written.
     """
     found = [(name, chapter, files[name]) for name, chapter in paragraphs if name in files]
-    infos = [(name, chapter, path, *read_wav_info(path)) for name, chapter, path in found]
+    infos = [(name, chapter, path, *read_audio_info(path)) for name, chapter, path in found]
     shared = _shared_format(infos)
     rate = shared.frame_rate if shared else 1
     entries: list[JoinEntry] = []
     warnings: list[str] = []
     position = 0
     previous_chapter: int | None = None
-    for name, chapter, path, _, frames in infos:
+    for name, chapter, path, _, frames, compressed in infos:
         if path.resolve() == target.resolve():
             raise AudioError("This file would be overwritten by the joined narration", path=path)
         first, last = 0, frames
@@ -164,7 +234,7 @@ def plan_join(
         if previous_chapter is not None:
             gap = chapter_gap if chapter != previous_chapter else paragraph_gap
             position += round(gap * rate)
-        entries.append(JoinEntry(name, path, first, last, position))
+        entries.append(JoinEntry(name, path, first, last, position, compressed))
         position += last - first
         previous_chapter = chapter
     return JoinLayout(target, shared or WavFormat(1, 2, 1), entries, position, warnings)
@@ -189,7 +259,7 @@ def write_joined(layout: JoinLayout, target: Path) -> None:
             written = 0
             for entry in layout.entries:
                 _write_silence(out, entry.offset_frames - written, silence, frame_size)
-                _copy_frames(out, entry)
+                _copy_frames(out, entry, frame_size)
                 written = entry.offset_frames + entry.frames
         os.replace(temporary, target)
     except OSError as error:
@@ -205,11 +275,13 @@ def _discard(path: Path) -> None:
         path.unlink(missing_ok=True)
 
 
-def _shared_format(infos: Sequence[tuple[str, int, Path, WavFormat, int]]) -> WavFormat | None:
+def _shared_format(
+    infos: Sequence[tuple[str, int, Path, WavFormat, int, bool]],
+) -> WavFormat | None:
     if not infos:
         return None
     first_path, first_format = infos[0][2], infos[0][3]
-    for _, _, path, found, _ in infos[1:]:
+    for _, _, path, found, _, _ in infos[1:]:
         if found != first_format:
             raise AudioError(
                 f"{path.name} is {found.describe()}, but {first_path.name} is "
@@ -232,7 +304,10 @@ def _write_silence(out: wave.Wave_write, frames: int, silence: int, frame_size: 
         remaining -= count
 
 
-def _copy_frames(out: wave.Wave_write, entry: JoinEntry) -> None:
+def _copy_frames(out: wave.Wave_write, entry: JoinEntry, frame_size: int) -> None:
+    if entry.compressed:
+        _copy_decoded_frames(out, entry, frame_size)
+        return
     try:
         with wave.open(str(entry.source), "rb") as source:
             source.setpos(entry.first_frame)
@@ -247,3 +322,20 @@ def _copy_frames(out: wave.Wave_write, entry: JoinEntry) -> None:
                 remaining -= len(data) // (source.getsampwidth() * source.getnchannels())
     except (wave.Error, EOFError):
         raise AudioError("Cannot read the samples of the file", path=entry.source) from None
+
+
+def _copy_decoded_frames(out: wave.Wave_write, entry: JoinEntry, frame_size: int) -> None:
+    """Decode an MP3 again and write the frames ``first_frame`` up to ``last_frame``."""
+    chunks, _ = _decode_mp3(entry.source)
+    position = 0
+    with contextlib.closing(chunks):
+        for chunk in chunks:
+            count = len(chunk) // frame_size
+            begin = max(entry.first_frame - position, 0)
+            end = min(entry.last_frame - position, count)
+            if end > begin:
+                out.writeframes(chunk[begin * frame_size : end * frame_size])
+            position += count
+            if position >= entry.last_frame:
+                return
+    raise AudioError("The file decodes to fewer samples than before", path=entry.source)
