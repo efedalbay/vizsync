@@ -21,8 +21,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from vizsync.asr.base import Word
 from vizsync.errors import OutputError
-from vizsync.match.normalize import normalize_text
+from vizsync.match.normalize import normalize_words
 from vizsync.pipeline import ParagraphResult
 
 MAX_LINE_CHARS = 42
@@ -108,15 +109,7 @@ def _token_times(
     tokens: Sequence[str], paragraph: ParagraphResult, start: float, end: float
 ) -> Times:
     """A ``(start, end)`` for every whitespace-separated token of the text."""
-    counts = [len(normalize_text(token)) for token in tokens]
-    known: list[tuple[float, float] | None] = [None] * len(tokens)
-    if len(paragraph.word_times) == sum(counts):
-        position = 0
-        for index, count in enumerate(counts):
-            matched = [w for w in paragraph.word_times[position : position + count] if w]
-            if matched:
-                known[index] = (matched[0][0], matched[-1][1])
-            position += count
+    known = _known_times(tokens, paragraph)
     result: Times = [(0.0, 0.0)] * len(tokens)
     index, left = 0, start
     while index < len(tokens):
@@ -140,6 +133,32 @@ def _token_times(
             clock += share
         index = stop
     return result
+
+
+def _known_times(
+    tokens: Sequence[str], paragraph: ParagraphResult
+) -> list[tuple[float, float] | None]:
+    """The time of each token, where the aligner matched a word of it (else None).
+
+    ``paragraph.word_times`` has one entry per normalized word. Running the tokens through
+    ``normalize_words`` with the token number as the time tells which tokens each normalized word
+    covers: a token may give several words ("north-east"), none (a dash), and a spelled-out number
+    covers several tokens, which then share the time of its word evenly.
+    """
+    covers = normalize_words([Word(text=t, start=i, end=i) for i, t in enumerate(tokens)])
+    known: list[tuple[float, float] | None] = [None] * len(tokens)
+    if len(paragraph.word_times) != len(covers):
+        return known
+    for time, cover in zip(paragraph.word_times, covers, strict=True):
+        if time is None:
+            continue
+        first, last = round(cover.start), round(cover.end)
+        width = (time[1] - time[0]) / (last - first + 1)
+        for index in range(first, last + 1):
+            share = (time[0] + (index - first) * width, time[0] + (index - first + 1) * width)
+            current = known[index]
+            known[index] = share if current is None else (current[0], share[1])
+    return known
 
 
 def _pieces(tokens: Sequence[str], times: Times) -> list[tuple[int, int]]:
