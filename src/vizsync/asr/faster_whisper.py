@@ -13,6 +13,8 @@ from types import ModuleType
 from typing import Any
 
 from vizsync.asr.base import Word
+from vizsync.asr.snap import snap_words_to_speech
+from vizsync.audio.speech import speech_segments
 from vizsync.errors import ModelLoadError, TranscriptionError
 
 MODEL_SIZES_MB = {"tiny.en": 75, "base.en": 145, "small.en": 484, "medium.en": 1500}
@@ -33,6 +35,9 @@ times whether the clip was recognized whole or in parts."""
 
 ModelFactory = Callable[[str, str, str], Any]
 """``(model name or folder, device, compute type)`` to a loaded model."""
+
+SpeechSegmentFinder = Callable[[Path], list[tuple[float, float]]]
+"""An audio file to its stretches of speech, as ``(start, end)`` seconds."""
 
 
 def resolve_device(device: str, *, cuda_available: bool) -> tuple[str, str]:
@@ -61,7 +66,12 @@ def download_size_mb(model: str) -> int | None:
 
 
 class FasterWhisperTranscriber:
-    """Turns audio into timed words with a faster-whisper model. Loads the model on first use."""
+    """Turns audio into timed words with a faster-whisper model. Loads the model on first use.
+
+    Word times are held to the speech the voice-activity detector finds in the same file
+    (``snap_to_speech``), because the model often starts the first word after a long silence
+    inside that silence.
+    """
 
     def __init__(
         self,
@@ -71,6 +81,8 @@ class FasterWhisperTranscriber:
         model_factory: ModelFactory | None = None,
         vad_filter: bool = True,
         vad_parameters: Mapping[str, Any] | None = None,
+        snap_to_speech: bool = True,
+        speech_segments: SpeechSegmentFinder | None = None,
     ) -> None:
         self.model_name = model
         self._device = device
@@ -79,6 +91,8 @@ class FasterWhisperTranscriber:
         self._vad_parameters = dict(
             DEFAULT_VAD_PARAMETERS if vad_parameters is None else vad_parameters
         )
+        self._snap_to_speech = snap_to_speech
+        self._speech_segments = speech_segments or _default_speech_segments()
         self._model: Any = None
 
     def is_cached(self) -> bool:
@@ -101,7 +115,7 @@ class FasterWhisperTranscriber:
                 vad_filter=self._vad_filter,
                 vad_parameters=self._vad_parameters,
             )
-            return [
+            words = [
                 Word(text=word.word.strip(), start=float(word.start), end=float(word.end))
                 for segment in segments
                 for word in segment.words or []
@@ -109,6 +123,17 @@ class FasterWhisperTranscriber:
             ]
         except Exception as error:
             raise TranscriptionError(f"Speech recognition failed ({error})", path=audio) from None
+        return self._held_to_speech(words, audio)
+
+    def _held_to_speech(self, words: list[Word], audio: Path) -> list[Word]:
+        """The words snapped to the speech of ``audio``, or as they are if it cannot be found."""
+        if not self._snap_to_speech or not words:
+            return words
+        try:
+            segments = self._speech_segments(audio)
+        except Exception:
+            return words
+        return snap_words_to_speech(words, segments)
 
     def _loaded_model(self) -> Any:
         if self._model is None:
@@ -137,6 +162,10 @@ def _library() -> ModuleType:
     # and one download is far below any limit, so the warning would only confuse.
     logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
     return faster_whisper
+
+
+def _default_speech_segments() -> SpeechSegmentFinder:
+    return speech_segments
 
 
 def _load_model(name: str, device: str, compute_type: str) -> Any:

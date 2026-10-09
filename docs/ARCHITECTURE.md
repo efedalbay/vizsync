@@ -87,9 +87,10 @@ vizsync/
 │   │   ├── inputs.py          ← expand globs/folders, natural sort, mode detection
 │   │   ├── timeline.py        ← parts + offsets, durations
 │   │   ├── join.py            ← paragraph WAV (or MP3, decoded) files → one narration.wav (layout, copy, trim)
-│   │   └── speech.py          ← where speech starts and ends (voice-activity detector)
+│   │   └── speech.py          ← where speech starts and ends (voice-activity detector, for --trim and for word times)
 │   ├── asr/
 │   │   ├── base.py            ← Transcriber protocol, Word model
+│   │   ├── snap.py            ← word times held to the detected speech (pure)
 │   │   └── faster_whisper.py  ← real implementation
 │   ├── match/
 │   │   ├── normalize.py       ← text → comparable words
@@ -127,6 +128,7 @@ class Transcriber(Protocol):
 - `FasterWhisperTranscriber` is the only real implementation in v1.
 - Tests use a `FakeTranscriber` that returns hand-written words, including deliberate mistakes. This is how the aligner is tested without audio or a model.
 - The pipeline calls the transcriber once per audio part and shifts the returned times by the part's offset. Long single files are handled inside faster-whisper (it processes long audio in windows and the voice-activity filter skips silence). The voice-activity filter pads each stretch of speech by 100 ms instead of the library's 400 ms (`DEFAULT_VAD_PARAMETERS`): with 400 ms, paragraph starts moved by up to 0.6 s and differed between a whole clip and the same clip cut into parts.
+- Even so, the model often stretches the start of the first word after a long silence back into the silence (on the fixture clip, the first word of P8 started 0.43 s earlier when the clip was recognized whole than when it was recognized as a part starting at P7), and sometimes the end of a word into the silence after it. `FasterWhisperTranscriber` therefore holds the word times to the speech: `audio/speech.py` `speech_segments` decodes the same file a second time and runs the detector with narrow settings (pad 30 ms, shortest silence 250 ms, shortest speech 100 ms; the library's 2000 ms silence would merge paragraphs that are 0.6 s apart, and its 400 ms pad would leave starts 0.4 s early), and the pure `asr/snap.py` `snap_words_to_speech` moves each word onto the stretch of speech it starts in (rules in `docs/SPEC.md` §4). This costs one extra decode and a small detector run per file. The model still receives the file path unchanged. If the detector fails, the words are returned as the model gave them, without failing the run. `snap_to_speech=False` switches this off (no CLI option), and `speech_segments=` replaces the detector in tests.
 - The model is downloaded on first use to the standard Hugging Face cache. The tool prints a clear message before a download and a clear error if the download fails.
 
 ## The aligner (the hard part)
@@ -218,7 +220,7 @@ Writers take the same in-memory result object and are independent of each other.
 
 ## Testing strategy
 
-- `tests/unit/`: parser, normalization, aligner (with `FakeTranscriber`-style word lists including every hard case above), span refinement, time formatting, input expansion, the pipeline, each output writer, chart map. No recorded audio and no model. The only audio is a tiny silent WAV that a few tests write themselves to check the duration reader. These run everywhere, including the cloud environment.
+- `tests/unit/`: parser, normalization, aligner (with `FakeTranscriber`-style word lists including every hard case above), span refinement, word times held to the speech (plain word and segment lists; the detector calls with the library functions replaced), time formatting, input expansion, the pipeline, each output writer, chart map. No recorded audio and no model. The only audio is a tiny silent WAV that a few tests write themselves to check the duration reader. These run everywhere, including the cloud environment.
 - `tests/slow/`: end-to-end runs with the real model on the fixture clip, marked `@pytest.mark.slow`: the command on the whole clip, the same clip cut into 3 parts (absolute times within 0.3 s), and cut into one file per paragraph (same order, paragraph lengths within 0.3 s; the silences between files are gone, so absolute times cannot match). They skip, with the reason, when the clip or the model is missing. Requires downloading a model, so they run on Efe's computer, not in the cloud environment (network access there is restricted). `VIZSYNC_TEST_MODEL` picks the model (default `base.en`).
 - Fixture: `tests/fixtures/northwind.wav`, a PCM WAV of about 40 seconds (16 kHz mono) of the English lines of `examples/northwind-script.md` with pauses of at least 0.8 s between paragraphs. Efe decides whether it is his own voice or a synthetic voice he generated himself. Never a recording of anyone else.
 - The aligner has a benchmark test: 4,500 script words against 4,500 recognized words with 5% random errors finishes under 10 seconds.
