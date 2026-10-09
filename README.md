@@ -4,7 +4,7 @@ Find out where each paragraph of your script starts and ends in your narration a
 
 vizsync takes a narration recording and the numbered script it was read from, and returns the start and end time of every paragraph. It is built for video makers who write a script first, record a voice-over, and then need to know exactly when to place charts, cut footage or add chapter markers.
 
-> **Status: in development, not released.** `vizsync check` and `vizsync align` (with `timing.json`, `timing.csv`, `chapters.txt`, `markers.edl` and `captions.srt`) work from source. `vizsync durations` (chart timing for vizreel) works too. The DaVinci Resolve import of `markers.edl` has not been tried in Resolve yet, and the package is not on PyPI yet.
+> **Status: first release (0.1.0).** `vizsync check` and `vizsync align` (with `timing.json`, `timing.csv`, `chapters.txt`, `markers.edl` and `captions.srt`) work, and so does `vizsync durations` (chart timing for vizreel). The DaVinci Resolve import of `markers.edl` has not been tried in Resolve yet.
 
 ## Why
 
@@ -128,7 +128,23 @@ To leave room for something added later, such as an intro, put `<!-- pause: 4.0 
 
 ## Installation
 
-Not on PyPI yet. From a clone of this repository, with [uv](https://docs.astral.sh/uv/):
+Python 3.11 or newer. Install it from PyPI with any of:
+
+```
+pip install vizsync
+uv tool install vizsync
+pipx install vizsync
+```
+
+Then:
+
+```
+vizsync --version
+vizsync check script.md
+vizsync align narration.wav --script script.md --out out
+```
+
+To work on vizsync itself, or to run the examples of this repository, use a clone with [uv](https://docs.astral.sh/uv/):
 
 ```
 uv sync
@@ -136,11 +152,9 @@ uv run vizsync check examples/northwind-script.md
 uv run vizsync align narration.wav --script examples/northwind-script.md --out out
 ```
 
-Python 3.11+. Speech recognition runs locally on your computer with [faster-whisper](https://github.com/SYSTRAN/faster-whisper). The first run downloads the speech model (about 480 MB for the default `small.en`; use `--model tiny.en` for a quick, less accurate run). No account, no upload, no cost per use.
+Speech recognition runs locally on your computer with [faster-whisper](https://github.com/SYSTRAN/faster-whisper). The first run downloads the speech model (about 480 MB for the default `small.en`; use `--model tiny.en` for a quick, less accurate run). No account, no upload, no cost per use.
 
 **Speed.** On a laptop CPU (Intel Core i5-12500H, 16 GB RAM, no GPU in use) the default `small.en` model recognized 13 minutes 25 seconds of audio in 2 minutes 29 seconds, about 5 times faster than real time. Matching the script takes well under a second. Measured with `.\scripts\check-local.ps1 -Speed` on the Northwind clip repeated to 13 minutes, since recognition time depends on the length of the audio, not on what is said.
-
-When it is released: `pip install vizsync`.
 
 ## Documents
 
