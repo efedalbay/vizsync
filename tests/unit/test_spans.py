@@ -77,10 +77,9 @@ P3 = "By the end of the year Northwind had hired forty drivers."
 
 
 def test_numbers_as_words_against_digits_keep_boundaries() -> None:
-    script = paragraphs(
-        P1, "Northwind earned twenty-five thousand dollars in the first quarter.", P3
-    )
-    spoken = speak(P1, "Northwind earned 25,000 dollars in the first quarter.", P3)
+    # A year read as "twenty twenty-three" is not converted, so it stays unmatched.
+    script = paragraphs(P1, "Northwind earned its first million in twenty twenty-three.", P3)
+    spoken = speak(P1, "Northwind earned its first million in 2023.", P3)
     spans = compute_spans(script, spoken.words)
     assert_span(spans[0], spoken.start(0), spoken.end(0), OK)
     assert spans[1].start == pytest.approx(spoken.start(1))
@@ -90,13 +89,37 @@ def test_numbers_as_words_against_digits_keep_boundaries() -> None:
 
 
 def test_number_at_paragraph_start_moves_start_back_over_the_digits() -> None:
-    script = paragraphs("Twenty-five stores opened across the northern region that year.", P3)
-    spoken = speak("25 stores opened across the northern region that year.", P3)
+    # "A hundred" is not converted, so it stays unmatched against "100".
+    script = paragraphs("A hundred stores opened across the northern region that year.", P3)
+    spoken = speak("100 stores opened across the northern region that year.", P3)
     spans = compute_spans(script, spoken.words)
-    # Raw start is "stores"; moved back over the unmatched "25", never before the first word.
+    # Raw start is "stores"; moved back over the unmatched "100", never before the first word.
     assert_span(spans[0], spoken.start(0), spoken.end(0), OK)
     assert spans[0].confidence == pytest.approx(0.8)
     assert_span(spans[1], spoken.start(1), spoken.end(1), OK)
+
+
+def test_spelled_out_amount_matches_recognized_digits() -> None:
+    amount = "Three hundred and seventy-five million dollars."
+    spoken = speak(P1, "$375 million dollars.", P3)
+    spans = compute_spans(paragraphs(P1, amount, P3), spoken.words)
+    assert_span(spans[0], spoken.start(0), spoken.end(0), OK)
+    assert_span(spans[1], spoken.start(1), spoken.end(1), OK)
+    assert spans[1].confidence == 1.0
+    # One entry per normalized script word: 375, million, dollars.
+    assert spans[1].word_times == tuple((word.start, word.end) for word in spoken.words[8:11])
+    assert_span(spans[2], spoken.start(2), spoken.end(2), OK)
+
+
+def test_spelled_out_number_across_recognized_words_is_one_word() -> None:
+    amount = "Northwind shipped twenty-five thousand parcels."
+    spoken = speak(P1, "Northwind shipped twenty five thousand parcels.", P3)
+    spans = compute_spans(paragraphs(P1, amount, P3), spoken.words)
+    assert_span(spans[1], spoken.start(1), spoken.end(1), OK)
+    assert spans[1].confidence == 1.0
+    twenty, thousand = spoken.words[10], spoken.words[12]
+    assert spans[1].word_times[2] == (twenty.start, thousand.end)
+    assert len(spans[1].word_times) == 4
 
 
 def test_misheard_names_stay_matched() -> None:

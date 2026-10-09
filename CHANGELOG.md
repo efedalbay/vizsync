@@ -21,6 +21,7 @@ maker needs from that.
 - `--join`, for one audio file per paragraph (WAV, or MP3 as ElevenLabs gives): joins the files into `narration.wav` with a silence between paragraphs and a longer one between chapters (`--paragraph-gap`, `--chapter-gap`), and gives the times of that file to the sample. Samples are copied unchanged, an MP3 is decoded once to 16-bit PCM, and files of different sample rates or channel counts stop the run. `--trim` first cuts the silence at the start and end of every file.
 - `<!-- pause: 4.0 -->` under a paragraph sets the silence after it to that many seconds when joining (`--join`), instead of the paragraph or chapter gap, for example where an intro is added later. Every output file includes it.
 - `vizsync durations TIMING_JSON`: when each chart clip of a [vizreel](https://github.com/efedalbay/vizreel) video goes on the timeline and how long it must be (`start`, `duration`, and `step_duration` and `clips` for a sequence). The charts come from a chart map file, from `<!-- chart: ID -->` tags under the paragraphs of the script, or both.
+- A number spelled out in the script, such as "three hundred and seventy-five million", is read as 375 million, the way speech recognition writes it, so a short paragraph made of a spoken amount is no longer reported as `missing`. Years read as "twenty twenty-three" are not covered.
 - Text output is written as UTF-8 whenever it is not a terminal, so paths and titles with Turkish letters survive redirection and capture.
 
 ### Notes

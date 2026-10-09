@@ -136,14 +136,16 @@ Output: for every script word, either the index of the recognized word it matche
 
 ### Normalization (`match/normalize.py`)
 
-Both sides go through the same function: Unicode NFKC, casefold, remove punctuation (keep apostrophes inside words, split on hyphens), split on whitespace. Digits are kept as written.
+Both sides go through the same rules: Unicode NFKC, casefold, remove punctuation (keep apostrophes inside words, split on hyphens), split on whitespace, then turn runs of spelled-out English number words into digits. Digits already written as digits are kept as written.
 
 Details:
 
 - An apostrophe (plain or typographic) is kept only between two letters or digits ("don't", "Northwind's"); elsewhere it is dropped.
-- Dashes of every kind and `/` separate words ("twenty-five" gives "twenty", "five").
+- Dashes of every kind and `/` separate words ("north-east" gives "north", "east").
 - A `.` between two digits is a decimal point and is kept ("3.5"). Every other punctuation mark or symbol is removed without separating: "25,000" becomes "25000", "U.S." becomes "us".
-- On the recognizer side a word that normalizes to nothing is dropped, and a word that normalizes to several words is split with its time interval shared evenly.
+- Number words become digits, the way the recognizer writes them (rules in `docs/SPEC.md` §1, "Text cleaning before alignment"). A small recursive-descent reader runs over the words left to right and takes the longest valid cardinal (up to 999,999, with "thousand" absorbed and an optional "point" fraction) at each position; a word that cannot extend it starts a new number, so the pass is linear. "million", "billion" and "trillion" stay separate words. One token-level pass serves both sides, so "twenty-five" (split at the hyphen) becomes "25" again.
+- On the recognizer side a word that normalizes to nothing is dropped, and a word that normalizes to several words is split with its time interval shared evenly. A number spoken as several recognized words ("three", "hundred", "seventy-five") becomes one word from the start of its first part to the end of its last.
+- `ParagraphSpan.word_times` has one entry per normalized script word, so a spelled-out number has one entry, not one per number word.
 
 ### Alignment
 
@@ -178,7 +180,8 @@ For each paragraph:
 
 | Case | Example | Expected behavior |
 |---|---|---|
-| Numbers written as words in the script, digits from the recognizer | script "twenty-five thousand dollars", recognizer "25,000 dollars" | Words inside the paragraph may stay unmatched; boundaries stay correct because neighbors match |
+| Numbers written as words in the script, digits from the recognizer | script "three hundred and seventy-five million dollars", recognizer "$375 million dollars" | Normalization turns both into "375 million dollars", so the paragraph is found with full confidence |
+| Numbers in a form normalization does not convert | script "twenty twenty-three" or "a hundred", recognizer "2023" or "100" | Words inside the paragraph may stay unmatched; boundaries stay correct because neighbors match |
 | Names misheard | "Zume" heard as "Zoom" or "Zoomy" | Fuzzy match keeps the word matched |
 | Narrator skips a sentence | A whole sentence not spoken | Its words are unmatched; paragraph confidence drops; other paragraphs unaffected |
 | Narrator repeats a sentence (re-take left in) | Same sentence twice | Alignment picks one occurrence; no crash; a warning if confidence drops |

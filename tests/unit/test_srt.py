@@ -173,14 +173,61 @@ def test_a_split_inside_a_sentence_uses_the_times_of_the_words() -> None:
 
 
 def test_punctuation_only_and_hyphenated_tokens_keep_the_times_in_step() -> None:
-    # "—" has no word of its own, "twenty-five" has two, "25,000" has one.
+    # "—" has no word of its own, "twenty-five thousand" is one word (25000), "25,000" is one.
     text = "Alpha — twenty-five thousand. Then 25,000 more people arrived."
-    # alpha | twenty five thousand | then 25000 more people arrived: 4 + 5 words
-    words = [(i * 1.0, i * 1.0 + 0.9) for i in range(9)]
+    # alpha | 25000 | then 25000 more people arrived: 7 words
+    words = [(i * 1.0, i * 1.0 + 0.9) for i in range(7)]
     cues = build_captions([paragraph("P1", text, 0.0, 8.9, words)])
     assert texts(cues) == ["Alpha — twenty-five thousand.", "Then 25,000 more people arrived."]
-    assert (cues[0].start, cues[0].end) == (0.0, 3.9)
-    assert (cues[1].start, cues[1].end) == (4.0, 8.9)
+    assert (cues[0].start, cues[0].end) == (0.0, 1.9)
+    assert (cues[1].start, cues[1].end) == (2.0, 8.9)
+
+
+def test_a_hyphenated_token_that_is_two_words_keeps_the_times_of_both() -> None:
+    text = "North-east people arrived."
+    words = [(0.0, 0.4), (0.5, 0.9), (1.0, 1.4), (1.5, 1.9)]
+    cues = build_captions([paragraph("P1", text, 0.0, 1.9, words)])
+    assert texts(cues) == ["North-east people arrived."]
+    assert (cues[0].start, cues[0].end) == (0.0, 1.9)
+
+
+def test_a_spelled_out_number_is_timed_by_the_one_word_it_matched() -> None:
+    text = "Revenue was three hundred and seventy-five million dollars. Then it fell."
+    # revenue was | 375 | million | dollars | then it fell: 8 words
+    words = [
+        (0.0, 0.5),
+        (0.6, 1.0),
+        (1.2, 2.4),
+        (2.5, 3.0),
+        (3.1, 3.6),
+        (5.0, 5.3),
+        (5.4, 5.6),
+        (5.7, 6.0),
+    ]
+    cues = build_captions([paragraph("P1", text, 0.0, 6.0, words)])
+    assert texts(cues) == [
+        "Revenue was three hundred and\nseventy-five million dollars.",
+        "Then it fell.",
+    ]
+    assert (cues[0].start, cues[0].end) == (0.0, 3.6)
+    assert (cues[1].start, cues[1].end) == (5.0, 6.0)
+
+
+def test_cues_around_a_spelled_out_number_never_overlap() -> None:
+    text = "It cost three hundred and seventy-five million dollars, said the report."
+    words = [
+        (0.0, 0.3),
+        (0.4, 0.7),
+        (1.0, 2.0),
+        (2.1, 2.5),
+        (2.6, 3.0),
+        (3.1, 3.4),
+        (3.5, 3.9),
+        (4.0, 4.3),
+    ]
+    cues = build_captions([paragraph("P1", text, 0.0, 4.3, words)])
+    for before, after in zip(cues, cues[1:], strict=False):
+        assert before.end <= after.start
 
 
 def test_a_cue_shorter_than_a_second_is_lengthened_into_free_time() -> None:

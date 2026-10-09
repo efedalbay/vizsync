@@ -88,6 +88,14 @@ Applied to the aligned text only:
 
 A paragraph with no text left after cleaning is an error.
 
+The script words and the recognized words are then compared without letter case and punctuation (see `docs/ARCHITECTURE.md`, Normalization). A number spelled out in English words counts as the digits speech recognition writes for it, so a script can use either form:
+
+- Whole numbers up to 999,999: `three hundred and seventy-five` is `375`, `twenty-five thousand` is `25000`, `two thousand five hundred` is `2500`.
+- A decimal with `point` and single digits: `two point five` is `2.5`, `one point oh five` is `1.05`.
+- `million`, `billion` and `trillion` stay words of their own: `three hundred and seventy-five million` is `375 million`, as `$375 million` is.
+- An `and` belongs to the number only after `hundred`, or after `thousand` when less than a hundred follows (`two thousand and five` is `2005`); `two and three` is `2 and 3`.
+- Words that do not continue the number start a new one: `twenty twenty-six` is `20 26`, not `2026`. Years read this way, ordinals (`first`), fractions (`half`) and `a hundred`, `a thousand` or `a million` are not converted, so they can stay unmatched against digits.
+
 ### Headings and chapters
 
 Any Markdown heading of level 2 or 3 (`##`, `###`) starts a chapter. A paragraph belongs to the last chapter heading above it. Paragraphs before the first heading belong to a chapter named `Intro`.
