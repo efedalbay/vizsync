@@ -7,7 +7,7 @@ import pytest
 
 from vizsync.asr import faster_whisper as fw
 from vizsync.asr.base import Word
-from vizsync.errors import ModelLoadError, TranscriptionError
+from vizsync.errors import AudioError, ModelLoadError, TranscriptionError
 
 
 @pytest.fixture(autouse=True)
@@ -42,6 +42,9 @@ def make_transcriber(fake: FakeModel, **kwargs: Any) -> tuple[fw.FasterWhisperTr
         created.append((name, device, compute_type))
         return fake
 
+    # The file names are made up, so the speech of a file is never looked for unless a test
+    # asks for it with its own segment finder.
+    kwargs.setdefault("snap_to_speech", False)
     transcriber = fw.FasterWhisperTranscriber(
         kwargs.pop("model", "small.en"), model_factory=factory, **kwargs
     )
@@ -124,6 +127,87 @@ def test_voice_activity_parameters_default_to_a_short_padding() -> None:
     transcriber, _ = make_transcriber(model)
     transcriber.transcribe(Path("a.wav"), language="en")
     assert model.calls[0][1]["vad_parameters"] == {"speech_pad_ms": 100}
+
+
+# --- Holding the words to the speech -------------------------------------------------------------
+
+
+def stretched_model() -> FakeModel:
+    """The fixture clip: "18" starts in the silence before P8, "bankruptcy." ends after it."""
+    return FakeModel(
+        [
+            SimpleNamespace(
+                words=[
+                    fake_word(" 18", 32.39, 33.27),
+                    fake_word(" months", 33.27, 33.7),
+                    fake_word(" bankruptcy.", 35.6, 36.7),
+                ]
+            )
+        ]
+    )
+
+
+UNSNAPPED = [
+    Word(text="18", start=32.39, end=33.27),
+    Word(text="months", start=33.27, end=33.7),
+    Word(text="bankruptcy.", start=35.6, end=36.7),
+]
+
+
+def test_words_are_held_to_the_speech_of_the_same_file() -> None:
+    asked: list[Path] = []
+
+    def segments(path: Path) -> list[tuple[float, float]]:
+        asked.append(path)
+        return [(32.80, 36.05)]
+
+    model = stretched_model()
+    transcriber, _ = make_transcriber(model, snap_to_speech=True, speech_segments=segments)
+    assert transcriber.transcribe(Path("P8.wav"), language="en") == [
+        Word(text="18", start=32.80, end=33.27),
+        Word(text="months", start=33.27, end=33.7),
+        Word(text="bankruptcy.", start=35.6, end=36.05),
+    ]
+    assert asked == [Path("P8.wav")]
+    assert model.calls[0][0] == str(Path("P8.wav"))
+
+
+@pytest.mark.parametrize("error", [AudioError("Cannot read audio"), RuntimeError("onnx failed")])
+def test_words_are_kept_as_recognized_when_the_speech_cannot_be_found(error: Exception) -> None:
+    def segments(path: Path) -> list[tuple[float, float]]:
+        raise error
+
+    transcriber, _ = make_transcriber(
+        stretched_model(), snap_to_speech=True, speech_segments=segments
+    )
+    assert transcriber.transcribe(Path("P8.wav"), language="en") == UNSNAPPED
+
+
+def test_holding_the_words_to_the_speech_can_be_switched_off() -> None:
+    def segments(path: Path) -> list[tuple[float, float]]:
+        raise AssertionError("the speech should not be looked for")
+
+    transcriber, _ = make_transcriber(
+        stretched_model(), snap_to_speech=False, speech_segments=segments
+    )
+    assert transcriber.transcribe(Path("P8.wav"), language="en") == UNSNAPPED
+
+
+def test_the_speech_is_not_looked_for_when_no_word_was_heard() -> None:
+    def segments(path: Path) -> list[tuple[float, float]]:
+        raise AssertionError("the speech should not be looked for")
+
+    transcriber, _ = make_transcriber(FakeModel([]), snap_to_speech=True, speech_segments=segments)
+    assert transcriber.transcribe(Path("P8.wav"), language="en") == []
+
+
+def test_words_are_held_to_the_speech_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(fw, "speech_segments", lambda path: [(32.80, 36.05)])
+    transcriber = fw.FasterWhisperTranscriber(
+        "small.en", model_factory=lambda name, device, compute_type: stretched_model()
+    )
+    words = transcriber.transcribe(Path("P8.wav"), language="en")
+    assert (words[0].start, words[-1].end) == (32.80, 36.05)
 
 
 def test_model_is_loaded_once_and_only_when_needed() -> None:
