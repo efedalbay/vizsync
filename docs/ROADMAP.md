@@ -71,6 +71,8 @@ Work proceeds one milestone at a time. A milestone is done only when every accep
 
 **Done when:** `pip install vizsync` then `vizsync align` on the example works in a fresh virtual environment.
 
+*Status:* done. vizsync 0.1.0 was published to PyPI on 2026-10-10 by the release workflow (tag `v0.1.0`, trusted publishing), and the GitHub release was made from the changelog. The workflow installed the released version from PyPI into a clean environment on Ubuntu and Windows and aligned the example clip with `base.en` (`8 ok, 0 low confidence, 0 missing`). The one open item from earlier milestones is still the DaVinci Resolve import of `markers.edl` (M4); the release notes say it has not been tried in Resolve.
+
 ## Later
 
 - WebVTT output next to `captions.srt` (SubRip is written since the Ledgerfall requests).
