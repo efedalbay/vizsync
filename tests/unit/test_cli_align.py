@@ -325,6 +325,19 @@ def test_chapter_warnings_are_printed_stored_in_timing_json_and_count_for_strict
     assert env.align(wav, "--strict").exit_code == 1
 
 
+def test_a_one_chapter_script_has_no_chapter_count_warning(env: Env) -> None:
+    env.script.write_text(
+        "## 1. Bir / 1. One\n\nP1 — x\n\n> Northwind opened its first office in 2016.\n"
+        "\nP2 — x\n\n> The team grew quickly after that.\n",
+        encoding="utf-8",
+    )
+    (wav,) = env.audio("all.wav")
+    result = env.align(wav, "--strict")
+    assert result.exit_code == 0, result.output
+    assert (env.out / "chapters.txt").read_text(encoding="utf-8") == "00:00 One\n"
+    assert env.timing()["warnings"] == []
+
+
 def test_no_chapter_warnings_without_the_chapters_format(env: Env) -> None:
     (wav,) = env.audio("all.wav")
     assert env.align(wav, "--formats", "json,edl", "--strict").exit_code == 0

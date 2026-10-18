@@ -53,8 +53,30 @@ def test_when_the_first_chapter_is_skipped_the_next_one_is_written_at_zero() -> 
 def test_fewer_than_three_chapters_gives_a_warning() -> None:
     result = build_chapters([chapter("A", 0.0), chapter("B", 30.0)], video_end=60.0)
     assert result.warnings == ["chapters: only 2 chapters, YouTube needs at least 3."]
-    one = build_chapters([chapter("A", 0.0)], video_end=60.0)
-    assert one.warnings == ["chapters: only 1 chapter, YouTube needs at least 3."]
+
+
+def test_a_script_with_one_chapter_gets_no_chapter_count_warning() -> None:
+    result = build_chapters([chapter("A", 0.0)], video_end=60.0)
+    assert result.lines == ["00:00 A"]
+    assert result.warnings == []
+
+
+def test_one_found_chapter_of_several_still_gives_the_warning() -> None:
+    chapters = [chapter("A", 0.0), chapter("B", None), chapter("C", None)]
+    result = build_chapters(chapters, video_end=60.0)
+    assert result.warnings == [
+        "chapters: 'B' skipped, none of its paragraphs was found.",
+        "chapters: 'C' skipped, none of its paragraphs was found.",
+        "chapters: only 1 chapter, YouTube needs at least 3.",
+    ]
+
+
+def test_a_single_chapter_script_still_gets_the_other_chapter_warnings() -> None:
+    result = build_chapters([chapter("A", 4.2)], video_end=60.0)
+    assert result.warnings == [
+        "chapters: 'A' starts at 00:04 but YouTube needs the first chapter at 00:00; "
+        "it is written at 00:00."
+    ]
 
 
 def test_a_chapter_shorter_than_ten_seconds_gives_a_warning() -> None:

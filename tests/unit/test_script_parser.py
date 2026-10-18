@@ -170,7 +170,13 @@ def test_text_before_the_first_paragraph_is_ignored() -> None:
         ("Hello <!-- a note --> world", "Hello world"),
         ("Before <!-- multi\nline\ncomment --> after", "Before after"),
         ("  lots   of \t space  ", "lots of space"),
-        ("Keep [words in brackets] and [a5]", "Keep [words in brackets] and [a5]"),
+        ("Cited [B §1] and [M §469]", "Cited and"),
+        ("It grew. [a, b][8] Then it fell.", "It grew. Then it fell."),
+        ("Words [in brackets] and [a5] go", "Words and go"),
+        ("A [note\nover two lines] here", "A here"),
+        ("Nested [a [b] c] goes, [partly", "Nested goes, [partly"),
+        ("An unclosed [bracket stays", "An unclosed [bracket stays"),
+        ("A [link](https://example.com) stays", "A [link](https://example.com) stays"),
         ("Keep 740 million and 2016's", "Keep 740 million and 2016's"),
     ],
 )
@@ -186,7 +192,9 @@ def test_cleaning_is_applied_to_quote_text() -> None:
     assert only_paragraph_text("P1 — x\n\n> _Big_ news [3]\n", TextMode.QUOTE) == "Big news"
 
 
-@pytest.mark.parametrize("empty", ["[5]", "<!-- only a comment -->", "**", "[1][2] _"])
+@pytest.mark.parametrize(
+    "empty", ["[5]", "<!-- only a comment -->", "**", "[1][2] _", "[B §1]", "[a][b §2]"]
+)
 def test_empty_after_cleaning_is_an_error(empty: str) -> None:
     text = f"P1 — Metin.\n\n> {empty}\n"
     assert problems_of(text) == [(1, "P1 has no text to align (empty after cleaning)")]

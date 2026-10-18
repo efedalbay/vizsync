@@ -24,16 +24,27 @@ _PAUSE_TAG = re.compile(r"<!--\s*pause\s*:(.*?)-->", re.IGNORECASE | re.DOTALL)
 _PAUSE_SECONDS = re.compile(r"^\d+(?:\.\d+)?$")
 _PAUSE_TAG_USAGE = "use <!-- pause: 4.0 --> with the seconds as a positive number"
 _HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
-_CITATION = re.compile(r"\[\d+\]")
+_SOURCE_MARK = re.compile(r"\[[^\[\]]*\](?!\()")
 _EMPHASIS = re.compile(r"[*_`]")
 
 
 def clean_text(text: str) -> str:
-    """Remove HTML comments, citation markers and emphasis characters, then collapse whitespace."""
+    """Remove HTML comments, bracketed source marks and emphasis characters, then collapse spaces.
+
+    A source mark is anything in square brackets (``[5]``, ``[B §1]``) except the text of a
+    Markdown link, ``[text](url)``. Nested brackets are removed from the inside out.
+    """
     text = _HTML_COMMENT.sub("", text)
-    text = _CITATION.sub("", text)
+    text = _remove_source_marks(text)
     text = _EMPHASIS.sub("", text)
     return " ".join(text.split())
+
+
+def _remove_source_marks(text: str) -> str:
+    previous = None
+    while previous != text:
+        previous, text = text, _SOURCE_MARK.sub("", text)
+    return text
 
 
 def parse_script(text: str, mode: TextMode = TextMode.QUOTE, *, path: Path | None = None) -> Script:

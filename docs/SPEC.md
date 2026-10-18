@@ -81,7 +81,7 @@ P5 — ...
 
 Applied to the aligned text only:
 
-1. Citation markers like `[5]`, `[30][31]` are removed.
+1. Source marks in square brackets are removed: `[5]`, `[30][31]`, `[B §1]`, `[M §469]`, `[a, b]`. Brackets are never read aloud, so anything between `[` and `]` goes, even over a line break; nested brackets are removed from the inside out. The text of a Markdown link, `[text](url)`, is kept, and so is a `[` that is never closed.
 2. Markdown emphasis characters (`*`, `_`, backticks) are removed.
 3. HTML comments are removed.
 4. Whitespace is collapsed.
@@ -253,7 +253,7 @@ YouTube description format, one line per chapter: `MM:SS Title`. If the video la
 - The first chapter is written at `00:00` (YouTube requires it), even if narration starts later. If the real start is more than 1 s after zero, a warning says so: `chapters: 'The Hook' starts at 00:04 but YouTube needs the first chapter at 00:00; it is written at 00:00.`
 - Times are rounded down to whole seconds. They include `--offset`.
 - A chapter whose paragraphs are all `missing` is left out, with a warning: `chapters: 'The Fall' skipped, none of its paragraphs was found.` The first chapter that is left is the one written at `00:00`. If no chapter is left, the file is not written.
-- Warnings when fewer than 3 chapters are listed (`chapters: only 2 chapters, YouTube needs at least 3.`) or a chapter is shorter than 10 s (`chapters: 'The Hook' is only 6 s long, YouTube needs at least 10 s.`). YouTube ignores the list in those cases. A chapter lasts until the next listed chapter starts; the last one lasts until the end of the video (`--offset` plus `total_duration`).
+- Warnings when fewer than 3 chapters are listed (`chapters: only 2 chapters, YouTube needs at least 3.`; not for a script that has only one chapter, such as a Short, which cannot have more, but a script with several chapters of which one was found still gets it) or a chapter is shorter than 10 s (`chapters: 'The Hook' is only 6 s long, YouTube needs at least 10 s.`). YouTube ignores the list in those cases. A chapter lasts until the next listed chapter starts; the last one lasts until the end of the video (`--offset` plus `total_duration`).
 
 These warnings are added only when `chapters` is in `--formats`, and they are stored in `timing.json` like any other warning.
 
@@ -277,7 +277,7 @@ Resolve places a marker by the record timecode of its event, so the timeline's s
 
 ### `captions.srt`
 
-The script text as subtitles (SubRip), timed by the speech. The text is the aligned text of each paragraph (`--text`), already without source marks such as `[5]`, so it is what the script says and not what a recognizer heard. A paragraph that is `missing` has no cue. The file is UTF-8 without a byte order mark, uses `\n` line ends and ends with a newline; times are `HH:MM:SS,mmm`, cues are numbered from 1 and separated by a blank line. If there is no cue at all, the file is not written.
+The script text as subtitles (SubRip), timed by the speech. The text is the aligned text of each paragraph (`--text`), already without source marks such as `[5]` or `[B §1]`, so it is what the script says and not what a recognizer heard. A paragraph that is `missing` has no cue. The file is UTF-8 without a byte order mark, uses `\n` line ends and ends with a newline; times are `HH:MM:SS,mmm`, cues are numbered from 1 and separated by a blank line. If there is no cue at all, the file is not written.
 
 Cues:
 

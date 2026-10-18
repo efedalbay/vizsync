@@ -56,7 +56,7 @@ def build_chapters(chapters: Sequence[ChapterResult], *, video_end: float) -> Ch
         )
     seconds = [0] + [math.floor(start) for _, start in found[1:]]
     warnings += _length_warnings(found, seconds, video_end)
-    if len(found) < MIN_CHAPTERS:
+    if len(found) < MIN_CHAPTERS and len(chapters) > 1:
         noun = "chapter" if len(found) == 1 else "chapters"
         warnings.append(f"chapters: only {len(found)} {noun}, YouTube needs at least 3.")
     hours = video_end >= 3600
