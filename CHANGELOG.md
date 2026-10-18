@@ -4,6 +4,13 @@ All notable changes to vizsync are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Every source mark in square brackets is removed from the text that is aligned and shown as captions, not only numbers: `[B §1]` and `[M §469]` are removed like `[8]`. Before, such a mark became words that matched nothing, which made captions made only of marks and stretched the end of a paragraph. A Markdown link, `[text](url)`, is kept.
+- A script with a single chapter, such as a Short, no longer gets the warning `chapters: only 1 chapter, YouTube needs at least 3.`
+
 ## [0.1.0] - 2026-10-09
 
 The first release. Given a narration recording and the numbered script it was read from, vizsync
