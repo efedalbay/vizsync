@@ -4,12 +4,16 @@ All notable changes to vizsync are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.1] - 2026-10-20
 
 ### Fixed
 
 - Every source mark in square brackets is removed from the text that is aligned and shown as captions, not only numbers: `[B §1]` and `[M §469]` are removed like `[8]`. Before, such a mark became words that matched nothing, which made captions made only of marks and stretched the end of a paragraph. A Markdown link, `[text](url)`, is kept.
 - A script with a single chapter, such as a Short, no longer gets the warning `chapters: only 1 chapter, YouTube needs at least 3.`
+
+### Notes
+
+- With one audio file per paragraph (`--join`), the times of the captions inside a paragraph are estimated from the length of the text, because nothing is recognized in that mode. Marks that are not spoken no longer take part of that time, so captions of scripts with source marks move. On a real 42-paragraph narration the captions came on average 1.10 s from the recognized speech, against 1.31 s before. They are still estimates; recognizing the paragraph files for caption timing is on the roadmap.
 
 ## [0.1.0] - 2026-10-09
 
