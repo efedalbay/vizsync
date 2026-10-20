@@ -77,6 +77,7 @@ Work proceeds one milestone at a time. A milestone is done only when every accep
 
 - WebVTT output next to `captions.srt` (SubRip is written since the Ledgerfall requests).
 - Word-level export in `timing.json`.
+- Recognize the paragraph files (`--join`) to time the captions by the spoken words, instead of the character-count estimate inside a paragraph (about 1 s off on a real narration).
 - Other recognition backends (whisper.cpp, a hosted API) behind the `Transcriber` interface.
 - Other languages beyond English narration.
 - `--patch` for vizreel specs using a comment-preserving YAML library.
