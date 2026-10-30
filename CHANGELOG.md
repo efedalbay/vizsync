@@ -4,6 +4,12 @@ All notable changes to vizsync are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- The first word of a sentence spoken right after a pause, typically a number such as "sixty-seven percent", no longer starts about a second late: the start of a paragraph and of a caption follows the sound.
+
 ## [0.1.1] - 2026-10-20
 
 ### Fixed

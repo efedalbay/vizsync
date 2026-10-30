@@ -172,6 +172,20 @@ def test_words_are_held_to_the_speech_of_the_same_file() -> None:
     assert model.calls[0][0] == str(Path("P8.wav"))
 
 
+def test_a_numeral_timed_late_is_pulled_to_the_start_of_the_speech() -> None:
+    # Real data, model small.en: "Sixty-seven percent" was recognized as "67%." timed at its end.
+    model = FakeModel(
+        [SimpleNamespace(words=[fake_word(" 67%.", 1.12, 1.72), fake_word(" That's", 1.72, 2.32)])]
+    )
+    transcriber, _ = make_transcriber(
+        model, snap_to_speech=True, speech_segments=lambda path: [(0.13, 1.50), (2.05, 8.35)]
+    )
+    assert transcriber.transcribe(Path("P1.wav"), language="en") == [
+        Word(text="67%.", start=0.13, end=1.50),
+        Word(text="That's", start=2.05, end=2.32),
+    ]
+
+
 @pytest.mark.parametrize("error", [AudioError("Cannot read audio"), RuntimeError("onnx failed")])
 def test_words_are_kept_as_recognized_when_the_speech_cannot_be_found(error: Exception) -> None:
     def segments(path: Path) -> list[tuple[float, float]]:
