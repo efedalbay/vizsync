@@ -8,6 +8,8 @@ Both sides go through the same rules, so the rules only have to be consistent:
 - Dashes of every kind and ``/`` separate words ("north-east" gives "north", "east").
 - A ``.`` between two digits is a decimal point and is kept ("3.5"); every other punctuation
   mark or symbol is removed without separating, so "25,000" becomes "25000" and "U.S." "us".
+- A word that ends with a digit is joined to the next word when that one starts with ``.`` and
+  a digit, because speech recognition often writes "$49.99" as "$49" and ".99".
 - Digits are kept as written. A run of spelled-out English number words becomes digits, the
   way speech recognition writes numbers: "three hundred and seventy-five" gives "375",
   "twenty-five thousand" "25000", "two point five" "2.5". "million", "billion" and
@@ -68,7 +70,9 @@ _Number = tuple[int, int]
 
 def normalize_text(text: str) -> list[str]:
     """Return the comparable words of ``text``, in order. Punctuation-only text gives ``[]``."""
-    return [token for token, _, _ in _merge_numbers(_split_text(text))]
+    raw = text.split()
+    joined = " ".join("".join(raw[first : last + 1]) for first, last in _decimal_runs(raw))
+    return [token for token, _, _ in _merge_numbers(_split_text(joined))]
 
 
 def normalize_words(words: Sequence[Word]) -> list[Word]:
@@ -77,13 +81,40 @@ def normalize_words(words: Sequence[Word]) -> list[Word]:
     A word that normalizes to nothing (punctuation only) is dropped. A word that normalizes to
     several words ("north-east") is split, and its time interval is shared evenly between them.
     A spelled-out number spoken as several words becomes one word, from the start of its first
-    part to the end of its last.
+    part to the end of its last, and so does a decimal written as two words ("$49", ".99").
     """
-    pieces = [piece for word in words for piece in _split_word(word, _split_text(word.text))]
+    joined = [
+        _joined_word(words[first : last + 1])
+        for first, last in _decimal_runs([word.text for word in words])
+    ]
+    pieces = [piece for word in joined for piece in _split_word(word, _split_text(word.text))]
     return [
         Word(text=token, start=pieces[first].start, end=pieces[last].end)
         for token, first, last in _merge_numbers([piece.text for piece in pieces])
     ]
+
+
+def _decimal_runs(texts: Sequence[str]) -> list[tuple[int, int]]:
+    """The first and last index of each run of raw words that reads as one decimal."""
+    runs: list[tuple[int, int]] = []
+    for index, text in enumerate(texts):
+        if runs and _continues_decimal(texts[index - 1], text):
+            runs[-1] = (runs[-1][0], index)
+        else:
+            runs.append((index, index))
+    return runs
+
+
+def _continues_decimal(previous: str, current: str) -> bool:
+    before, after = previous.rstrip(), current.lstrip()
+    return before[-1:].isdigit() and after[:1] == _DECIMAL_POINT and after[1:2].isdigit()
+
+
+def _joined_word(parts: Sequence[Word]) -> Word:
+    if len(parts) == 1:
+        return parts[0]
+    text = "".join(part.text.strip() for part in parts)
+    return Word(text=text, start=parts[0].start, end=parts[-1].end)
 
 
 def _split_text(text: str) -> list[str]:

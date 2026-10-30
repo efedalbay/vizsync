@@ -145,6 +145,7 @@ Details:
 - An apostrophe (plain or typographic) is kept only between two letters or digits ("don't", "Northwind's"); elsewhere it is dropped.
 - Dashes of every kind and `/` separate words ("north-east" gives "north", "east").
 - A `.` between two digits is a decimal point and is kept ("3.5"). Every other punctuation mark or symbol is removed without separating: "25,000" becomes "25000", "U.S." becomes "us".
+- Before anything else, a word that ends with a digit is joined to the next word when that word starts with `.` followed by a digit, on the raw text (the decimal point would be gone after the character rules): the recognizer often writes "$49.99" as "$49" and ".99.", and the joined word "$49.99." gives "49.99". A run of such words is joined into one; on the recognizer side the joined word lasts from the start of its first part to the end of its last. Both sides apply it, so the captions can map script tokens to normalized words through `normalize_words`.
 - Number words become digits, the way the recognizer writes them (rules in `docs/SPEC.md` §1, "Text cleaning before alignment"). A small recursive-descent reader runs over the words left to right and takes the longest valid cardinal (up to 999,999, with "thousand" absorbed and an optional "point" fraction) at each position; a word that cannot extend it starts a new number, so the pass is linear. "million", "billion" and "trillion" stay separate words. One token-level pass serves both sides, so "twenty-five" (split at the hyphen) becomes "25" again.
 - On the recognizer side a word that normalizes to nothing is dropped, and a word that normalizes to several words is split with its time interval shared evenly. A number spoken as several recognized words ("three", "hundred", "seventy-five") becomes one word from the start of its first part to the end of its last.
 - `ParagraphSpan.word_times` has one entry per normalized script word, so a spelled-out number has one entry, not one per number word.
@@ -189,6 +190,7 @@ For each paragraph:
 | Narrator repeats a sentence (re-take left in) | Same sentence twice | Alignment picks one occurrence; no crash; a warning if confidence drops |
 | Whole paragraph missing from the audio | P17 never spoken | `missing`, neighbors correct |
 | Very short paragraph | 3 words | Still gets a span; confidence may be low |
+| Decimal written as two words by the recognizer | script "$49.99", recognizer "$49" ".99." | The two recognized words are joined into "49.99", so the paragraph is found with full confidence and starts at "$49" |
 | Recognizer hallucinates text in silence | "Thank you for watching" at the end | Extra words are skipped as gaps |
 | Two paragraphs starting with the same words | "And then..." twice | Order constraint keeps them apart |
 

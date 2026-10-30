@@ -213,6 +213,23 @@ def test_a_spelled_out_number_is_timed_by_the_one_word_it_matched() -> None:
     assert (cues[1].start, cues[1].end) == (5.0, 6.0)
 
 
+def test_a_decimal_price_is_timed_by_its_word() -> None:
+    text = "It costs $49.99 today. Then it fell."
+    words = [(0.0, 0.3), (0.4, 0.7), (1.0, 2.0), (2.1, 2.5), (4.0, 4.3), (4.4, 4.7), (4.8, 5.0)]
+    cues = build_captions([paragraph("P1", text, 0.0, 5.0, words)])
+    assert texts(cues) == ["It costs $49.99 today.", "Then it fell."]
+    assert [(c.start, c.end) for c in cues] == [(0.0, 2.5), (4.0, 5.0)]
+
+
+def test_a_decimal_split_over_two_tokens_is_timed_like_a_spelled_out_number() -> None:
+    text = "It costs $49 .99. Then it fell."
+    # it | costs | 49.99 (two tokens) | then | it | fell: 6 words
+    words = [(0.0, 0.3), (0.4, 0.7), (1.0, 2.0), (4.0, 4.3), (4.4, 4.7), (4.8, 5.0)]
+    cues = build_captions([paragraph("P1", text, 0.0, 5.0, words)])
+    assert texts(cues) == ["It costs $49 .99.", "Then it fell."]
+    assert [(c.start, c.end) for c in cues] == [(0.0, 2.0), (4.0, 5.0)]
+
+
 def test_cues_around_a_spelled_out_number_never_overlap() -> None:
     text = "It cost three hundred and seventy-five million dollars, said the report."
     words = [

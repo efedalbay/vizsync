@@ -94,6 +94,7 @@ The script words and the recognized words are then compared without letter case 
 - A decimal with `point` and single digits: `two point five` is `2.5`, `one point oh five` is `1.05`.
 - `million`, `billion` and `trillion` stay words of their own: `three hundred and seventy-five million` is `375 million`, as `$375 million` is.
 - An `and` belongs to the number only after `hundred`, or after `thousand` when less than a hundred follows (`two thousand and five` is `2005`); `two and three` is `2 and 3`.
+- A decimal that speech recognition writes as two words counts as one: `$49` followed by `.99` is `49.99`, so it matches a script that says `$49.99`. A word ending in a digit is joined to the next word only when that word starts with `.` and a digit (`.99`, `.1M`); `2016.` followed by `99` stays two words.
 - Words that do not continue the number start a new one: `twenty twenty-six` is `20 26`, not `2026`. Years read this way, ordinals (`first`), fractions (`half`) and `a hundred`, `a thousand` or `a million` are not converted, so they can stay unmatched against digits.
 
 ### Headings and chapters

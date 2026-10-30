@@ -122,6 +122,26 @@ def test_spelled_out_number_across_recognized_words_is_one_word() -> None:
     assert len(spans[1].word_times) == 4
 
 
+def test_price_split_before_its_decimal_point_matches_the_script() -> None:
+    spoken = speak(P1, "It costs $49 .99. today.", P3)
+    spans = compute_spans(paragraphs(P1, "It costs $49.99 today.", P3), spoken.words)
+    assert_span(spans[0], spoken.start(0), spoken.end(0), OK)
+    assert_span(spans[1], spoken.start(1), spoken.end(1), OK)
+    assert spans[1].confidence == 1.0
+    dollars, cents = spoken.words[10], spoken.words[11]
+    assert spans[1].word_times[2] == (dollars.start, cents.end)
+    assert len(spans[1].word_times) == 4
+    assert_span(spans[2], spoken.start(2), spoken.end(2), OK)
+
+
+def test_paragraph_of_only_a_split_price_is_found_from_its_first_part() -> None:
+    words = [Word(text=" $49", start=0.10, end=0.59), Word(text=" .99.", start=0.59, end=1.87)]
+    (span,) = compute_spans(paragraphs("$49.99."), words)
+    assert_span(span, 0.10, 1.87, OK)
+    assert span.confidence == 1.0
+    assert span.word_times == ((0.10, 1.87),)
+
+
 def test_misheard_names_stay_matched() -> None:
     script = paragraphs(
         "Northwind bought Zume in the spring.", "Then the team moved Zume to the cloud with Zume."
