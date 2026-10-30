@@ -1,3 +1,3 @@
 """vizsync: find where each paragraph of a script sits in a narration recording."""
 
-__version__ = "0.1.1"
+__version__ = "0.1.2"
