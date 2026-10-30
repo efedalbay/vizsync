@@ -9,6 +9,7 @@ All notable changes to vizsync are documented here. The format follows
 ### Fixed
 
 - The first word of a sentence spoken right after a pause, typically a number such as "sixty-seven percent", no longer starts about a second late: the start of a paragraph and of a caption follows the sound.
+- A price or decimal the speech model writes in two words (`$49` and `.99`) is read as one number, so a script that says `$49.99` matches it. Before, only `99` matched, the paragraph was reported as low confidence and started late.
 
 ## [0.1.1] - 2026-10-20
 

@@ -334,3 +334,121 @@ def test_normalize_words_times_stay_in_order() -> None:
     assert [w.text for w in result] == normalize_text(text)
     assert all(w.start <= w.end for w in result)
     assert all(a.end <= b.start for a, b in zip(result, result[1:], strict=False))
+
+
+# --- A decimal the recognizer writes as two words ---
+
+
+def test_a_price_split_before_its_decimal_point_is_one_word() -> None:
+    words = [Word(text=" $49", start=0.10, end=0.59), Word(text=" .99.", start=0.59, end=1.87)]
+    assert normalize_words(words) == [Word(text="49.99", start=0.10, end=1.87)]
+    assert normalize_text("$49.99.") == normalize_text("49.99") == ["49.99"]
+
+
+def test_a_unit_letter_stays_attached_to_the_joined_decimal() -> None:
+    words = [Word(text=" $5", start=2.0, end=2.3), Word(text=" .1M", start=2.3, end=2.9)]
+    assert normalize_words(words) == [Word(text="5.1m", start=2.0, end=2.9)]
+    assert normalize_text("$5.1M") == ["5.1m"]
+
+
+def test_a_joined_decimal_keeps_the_scale_word_after_it() -> None:
+    words = [
+        Word(text=" $71", start=4.0, end=4.4),
+        Word(text=" .8", start=4.4, end=4.9),
+        Word(text=" million", start=5.0, end=5.5),
+    ]
+    assert normalize_words(words) == [
+        Word(text="71.8", start=4.0, end=4.9),
+        Word(text="million", start=5.0, end=5.5),
+    ]
+    assert normalize_text("$71.8 million") == ["71.8", "million"]
+
+
+def test_a_version_number_split_before_its_point_is_one_word() -> None:
+    words = [
+        Word(text=" version", start=0.0, end=0.4),
+        Word(text=" 2", start=0.5, end=0.7),
+        Word(text=" .0", start=0.7, end=1.0),
+    ]
+    assert normalize_words(words) == [
+        Word(text="version", start=0.0, end=0.4),
+        Word(text="2.0", start=0.5, end=1.0),
+    ]
+
+
+def test_a_chain_of_decimal_parts_is_joined_into_one_word() -> None:
+    words = [
+        Word(text=" 1", start=0.0, end=0.2),
+        Word(text=".2", start=0.2, end=0.4),
+        Word(text=".3", start=0.4, end=0.7),
+    ]
+    assert normalize_words(words) == [Word(text="1.2.3", start=0.0, end=0.7)]
+
+
+@pytest.mark.parametrize(
+    ("texts", "expected"),
+    [
+        ([" price", " .99"], ["price", "99"]),
+        ([" 3", " .foo"], ["3", "foo"]),
+        ([" 3", " ."], ["3"]),
+        ([" 2016.", " 99"], ["2016", "99"]),
+        ([" 2016.", " .99"], ["2016", "99"]),
+        ([" $49,", " .99"], ["49", "99"]),
+        ([" $49", " then", " .99"], ["49", "then", "99"]),
+    ],
+)
+def test_no_join_without_a_digit_on_both_sides_of_a_leading_point(
+    texts: list[str], expected: list[str]
+) -> None:
+    words = [Word(text=t, start=i * 0.5, end=i * 0.5 + 0.4) for i, t in enumerate(texts)]
+    result = normalize_words(words)
+    assert [w.text for w in result] == expected
+    assert normalize_text("".join(texts)) == expected
+
+
+def test_number_words_around_a_joined_decimal_still_merge() -> None:
+    words = [
+        Word(text=" three", start=0.0, end=0.3),
+        Word(text=" hundred", start=0.4, end=0.8),
+        Word(text=" and", start=0.9, end=1.0),
+        Word(text=" $71", start=1.1, end=1.5),
+        Word(text=" .8", start=1.5, end=1.9),
+        Word(text=" million", start=2.0, end=2.4),
+        Word(text=" twenty", start=2.5, end=2.8),
+        Word(text=" five", start=2.9, end=3.2),
+    ]
+    assert normalize_words(words) == [
+        Word(text="300", start=0.0, end=0.8),
+        Word(text="and", start=0.9, end=1.0),
+        Word(text="71.8", start=1.1, end=1.9),
+        Word(text="million", start=2.0, end=2.4),
+        Word(text="25", start=2.5, end=3.2),
+    ]
+
+
+def test_a_joined_word_that_splits_shares_the_joined_interval() -> None:
+    words = [Word(text=" $49", start=1.0, end=1.3), Word(text=" .99-a-month", start=1.3, end=1.9)]
+    result = normalize_words(words)
+    assert [w.text for w in result] == ["49.99", "a", "month"]
+    assert [w.start for w in result] == pytest.approx([1.0, 1.3, 1.6])
+    assert [w.end for w in result] == pytest.approx([1.3, 1.6, 1.9])
+
+
+def test_script_tokens_split_before_a_decimal_point_read_like_recognized_words() -> None:
+    text = "Northwind sold it for $49 .99. then 2 .0 and price .5 at 2016. 99 or 1 .2 .3"
+    words = [
+        Word(text=f" {token}", start=index * 0.5, end=index * 0.5 + 0.4)
+        for index, token in enumerate(text.split())
+    ]
+    result = normalize_words(words)
+    assert [w.text for w in result] == normalize_text(text)
+    assert "49.99" in normalize_text(text) and "2.0" in normalize_text(text)
+    assert all(w.start <= w.end for w in result)
+    assert all(a.end <= b.start for a, b in zip(result, result[1:], strict=False))
+
+
+def test_joining_does_not_change_the_input() -> None:
+    words = [Word(text=" $49", start=0.10, end=0.59), Word(text=" .99.", start=0.59, end=1.87)]
+    before = list(words)
+    normalize_words(words)
+    assert words == before
