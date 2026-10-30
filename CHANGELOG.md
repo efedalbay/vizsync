@@ -4,12 +4,16 @@ All notable changes to vizsync are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.1.2] - 2026-10-30
 
 ### Fixed
 
-- The first word of a sentence spoken right after a pause, typically a number such as "sixty-seven percent", no longer starts about a second late: the start of a paragraph and of a caption follows the sound.
-- A price or decimal the speech model writes in two words (`$49` and `.99`) is read as one number, so a script that says `$49.99` matches it. Before, only `99` matched, the paragraph was reported as low confidence and started late.
+- The first word of a sentence spoken right after a pause, typically a number such as "sixty-seven percent", no longer starts about a second late: the start of a paragraph and of a caption follows the sound. (#33)
+- A price or decimal the speech model writes in two words (`$49` and `.99`) is read as one number, so a script that says `$49.99` matches it. Before, only `99` matched, the paragraph was reported as low confidence and started late. (#34)
+
+### Notes
+
+- Checked on four real Shorts and a 43-paragraph narration (`--join --trim`). Only the first paragraph of two Shorts moved: one that opens with a price (low confidence, 0.59 s, now ok at 0.10 s) and one that opens with a percentage (1.12 s, now 0.13 s). Every other paragraph and caption kept its time.
 
 ## [0.1.1] - 2026-10-20
 
